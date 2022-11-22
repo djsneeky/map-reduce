@@ -8,12 +8,11 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-set(BINARY ${CMAKE_PROJECT_NAME}_test)
+set(TEST_BINARY ${CMAKE_PROJECT_NAME}_test)
 file(GLOB_RECURSE TEST_SOURCES LIST_DIRECTORIES false *.h *.cpp)
-set(SOURCES ${TEST_SOURCES})
-add_executable(${BINARY} ${TEST_SOURCES})
+add_executable(${TEST_BINARY} ${TEST_SOURCES})
 # add_test(NAME ${BINARY} COMMAND ${BINARY})
-target_link_libraries(${BINARY} PUBLIC ${CMAKE_PROJECT_NAME}_lib GTest::gtest_main)
+target_link_libraries(${TEST_BINARY} ${CMAKE_PROJECT_NAME}_lib GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(${BINARY})
+gtest_discover_tests(${TEST_BINARY})
