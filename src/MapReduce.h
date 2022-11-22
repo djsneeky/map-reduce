@@ -3,9 +3,12 @@
 
 #include <map>
 #include <string>
+#include <cstdbool>
+#include <queue>
 
-void mapReduce();
-void populateLineQueue();
+void mapReduceParallel();
+bool mapReduceSerial();
+bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 void populateWordMap(const std::string& line, std::map<std::string, int>& wordMap, char delim);
 
 #endif
