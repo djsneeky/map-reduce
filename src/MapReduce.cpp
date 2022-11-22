@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdbool>
+#include <iostream>
 
 // openmp function that runs on each proc
 void mapReduceParallel()
@@ -29,10 +30,11 @@ bool mapReduceSerial()
 {
     // used in mod operation to determine final reducer queue
     const int maxReducers = 8;
+    const std::hash<std::string> wordHashFn;
 
     // read file and put lines into a queue
     std::queue<std::string> lineQueue;
-    std::map<std::string, int>& wordMap;
+    std::map<std::string, int> wordMap;
     if (!populateLineQueue("C:/Users/David/Documents/Build/map-reduce/test/files/jungle.txt", lineQueue)) {
         return false;
     }
@@ -44,25 +46,32 @@ bool mapReduceSerial()
     }
     
     // split words in map to other 'reducer' queues
+    int reducerQueueId;
     std::map<std::string, int>::iterator it;
     for (it = wordMap.begin(); it != wordMap.end(); it++)
     {
-        getReducerQueueId(it->first, maxReducers);
+        int reducerQueueId = (int) wordHashFn(it->first) % maxReducers;
+        // reducerQueueId = getReducerQueueId(it->first, wordHashFn, maxReducers);
+        std::cout << reducerQueueId << " ";
     }
-    
     
     return true;
 }
 
 /**
- * @brief Takes a pair from a word map and returns its desired reducer queue destination
+ * @brief Takes a word and a hash function and returns its desired reducer queue destination
  * 
  * @param wordMap a reference to the word map to reduce
- * @return true if the pair can be sent to a reducer queue, false otherwise
+ * @param wordHashFn a reference to the hash function
+ * @param maxReducers the max number of reducers used
+ * 
+ * @return the reducer queue id number
  */
-bool getReducerQueueId(std::string word, int maxReducers)
+int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, int maxReducers)
 {
-    return false;
+    int num = (int) wordHashFn(word) % maxReducers;
+
+    return num;
 }
 
 /**

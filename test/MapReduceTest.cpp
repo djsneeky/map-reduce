@@ -20,3 +20,13 @@ TEST(MapReduceTest, TestPopulateWordMap_BasicFail) {
     populateWordMap(line, wordMap, ' ');
     EXPECT_EQ(wordMap["NOPE"], 0) << "Word not from original line found in map";
 }
+
+// this is probably not a repeatable test if the hash is not seeded...
+TEST(MapReduceTest, TestGetReducerQueueId_BasicPass) {
+    std::string word = "Jungle";
+    std::hash<std::string> wordHashFn;
+    const int maxReducers = 10;
+
+    int reducerQueueId = getReducerQueueId(word, wordHashFn, maxReducers);
+    EXPECT_EQ(reducerQueueId, 1);
+}
