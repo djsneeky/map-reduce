@@ -31,10 +31,11 @@ void populateLineQueue()
 }
 
 /**
- * @brief 
+ * @brief Takes a line and puts words into a map
  * 
- * @param line 
- * @param word_map 
+ * @param line a string to process
+ * @param word_map a reference to the map to populate
+ * @param delim the delimiter used to find word boundaries
  */
 void populateWordMap(const std::string& line, std::map<std::string, int>& wordMap, char delim)
 {
