@@ -29,13 +29,14 @@ void mapReduceParallel()
 bool mapReduceSerial()
 {
     // used in mod operation to determine final reducer queue
-    const int maxReducers = 8;
+    unsigned int maxReducers = 8;
     const std::hash<std::string> wordHashFn;
+    size_t hash;
 
     // read file and put lines into a queue
     std::queue<std::string> lineQueue;
     std::map<std::string, int> wordMap;
-    if (!populateLineQueue("C:/Users/David/Documents/Build/map-reduce/test/files/jungle.txt", lineQueue)) {
+    if (!populateLineQueue("../test/files/jungle.txt", lineQueue)) {
         return false;
     }
 
@@ -46,13 +47,11 @@ bool mapReduceSerial()
     }
     
     // split words in map to other 'reducer' queues
-    int reducerQueueId;
+    unsigned int reducerQueueId;
     std::map<std::string, int>::iterator it;
     for (it = wordMap.begin(); it != wordMap.end(); it++)
     {
-        int reducerQueueId = (int) wordHashFn(it->first) % maxReducers;
-        // reducerQueueId = getReducerQueueId(it->first, wordHashFn, maxReducers);
-        std::cout << reducerQueueId << " ";
+        reducerQueueId = wordHashFn(it->first) % maxReducers;
     }
     
     return true;
