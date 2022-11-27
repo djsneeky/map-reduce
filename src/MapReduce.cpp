@@ -7,30 +7,80 @@
 #include <sstream>
 #include <cstdbool>
 #include <iostream>
-
 #include <omp.h>
 
 // openmp function that runs on each proc
 void mapReduceParallel()
 {
-    // initialize queues for lines - one for each mapper thread
+    int max_threads = omp_get_max_threads();
+
+    // queues for lines - one for each mapper thread
     std::vector<std::queue<std::string>> lineQueues;
+    for (int i = 0; i < max_threads; i++)
+    {
+        lineQueues.push_back(std::queue<std::string>());
+    }
+
+    // word maps - one for each mapper thread
+    std::vector<std::map<std::string, int>> wordMaps;
+    for (int i = 0; i < max_threads; i++)
+    {
+        wordMaps.push_back(std::map<std::string, int>());
+    }
+
+    // hash function for <string, int> pair reducer id
+    const std::hash<std::string> wordHashFn;
+
+    // create reducer queues
+    std::vector<std::queue<std::pair<std::string, int>>> reducerQueues;
+    for (int i = 0; i < max_threads; i++)
+    {
+        reducerQueues.push_back(std::queue<std::pair<std::string, int>>());
+    }
+
+    // create reducer maps
+    std::vector<std::map<std::string, int>> reducerMaps;
+    for (int i = 0; i < max_threads; i++)
+    {
+        reducerMaps.push_back(std::map<std::string, int>());
+    }
 
     #pragma omp parallel
     {
-        #pragma omp single
+        #pragma omp single nowait
         {
             // reader thread reads files and put lines of file into queues
             // reader thread requests file when no remaining work
+            populateLineQueues("../test/files/jungle.txt", lineQueues);
         }
 
-        #pragma omp single
+        #pragma omp single nowait
         {
-            // map thread to read line queues and place words into thread local word map
+            // get the thread id
+            int thread_id = omp_get_thread_num();
+            // check to see that there are lines available in the queue
+            while (!lineQueues[thread_id].empty())
+            {
+                // map thread to read line queues and place words into thread local word map
+                populateWordMap(lineQueues[thread_id].front(), wordMaps[thread_id], ' ');
+                lineQueues[thread_id].pop();
+            }
             // map map thread will put pairs onto queues for for each reducer
+            // split words in map to other 'reducer' queues
+            unsigned int reducerQueueId;
+            std::map<std::string, int>::iterator it;
+            for (it = wordMaps[thread_id].begin(); it != wordMaps[thread_id].end(); it++)
+            {
+                // get the dest reducer id
+                reducerQueueId = getReducerQueueId(it->first, wordHashFn, max_threads);
+                // send to reducer 
+                reducerQueues[reducerQueueId].push(std::make_pair(it->first, it->second));
+                // remove pair from map
+                wordMaps[thread_id].erase(it);
+            }
         }
 
-        #pragma omp single
+        #pragma omp single nowait
         {
             // reducer thread receives pair from queue and updates its map
         }
@@ -47,7 +97,6 @@ bool mapReduceSerial()
     // used in mod operation to determine final reducer queue
     unsigned int maxReducers = 8;
     const std::hash<std::string> wordHashFn;
-    size_t hash;
 
     // read file and put lines into a queue
     std::queue<std::string> lineQueue;
@@ -92,11 +141,40 @@ unsigned int getReducerQueueId(const std::string &word, const std::hash<std::str
 }
 
 /**
+ * @brief Reads a file line by line and loops through a vector, populating line queues
+ * 
+ * @param fileName the path of the file
+ * @param lineQueues the vector of queues
+ * @return true if the file has been processed successfully, false otherwise
+ */
+bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues)
+{
+    std::ifstream file(fileName);
+    int i = 0;
+    if (file.is_open())
+    {
+        std::string line;
+        while (std::getline(file, line))
+        {
+            lineQueues[i++].push(line);
+            i %= lineQueues.size();
+        }
+        file.close();
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+/**
  * @brief Reads a file line by line and populates a line queue
  *
  * Used by the reader threads
  *
  * @param fileName the absolute path of the file
+ * @param lineQueue the queue to populate
  * @return true if the file has been processed successfully, false otherwise
  */
 bool populateLineQueue(const std::string &fileName, std::queue<std::string> &lineQueue)
