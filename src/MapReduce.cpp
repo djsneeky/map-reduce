@@ -45,13 +45,16 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
+    // reader thread reads files and put lines of file into queues
+    // reader thread requests file when no remaining work
+    // populateLineQueues("../test/files/jungle.txt", lineQueues);
+
     #pragma omp parallel
     {
         #pragma omp single nowait
         {
-            // reader thread reads files and put lines of file into queues
-            // reader thread requests file when no remaining work
-            populateLineQueues("../test/files/jungle.txt", lineQueues);
+            // check if there are files to read
+            // read file and populate line queues
         }
 
         #pragma omp single nowait
