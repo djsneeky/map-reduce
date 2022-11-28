@@ -8,7 +8,7 @@
 #include <cstdbool>
 #include <iostream>
 #include <omp.h>
-#include <filesystem>
+// #include <filesystem>
 
 // openmp function that runs on each proc
 void mapReduceParallel()
@@ -46,21 +46,30 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
+    std::queue<std::string> testFileList;
+    // addTestFiles("../test/files", testFileList);
+
+    unsigned int readerThreadCount = omp_get_max_threads();
+
     #pragma omp parallel
     {
+        int thread_id = omp_get_thread_num();
         // Reader threads
         #pragma omp single nowait
         {
-            // reader thread reads files and put lines of file into queues
-            // reader thread requests file when no remaining work
-            populateLineQueues("../test/files/jungle.txt", lineQueues);
+            for (int i = 0; i < readerThreadCount; i++)
+            {
+                #pragma omp task
+                {
+                    // takes a file list and populates a thread specific line queue
+                    readerTask(testFileList, lineQueues[thread_id]);
+                }
+            }
         }
 
         // Mapper threads
         #pragma omp single nowait
         {
-            // get the thread id
-            int thread_id = omp_get_thread_num();
             // check to see that there are lines available in the queue
             while (!lineQueues[thread_id].empty())
             {
@@ -170,7 +179,30 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
     {
         return false;
     }
-    
+}
+
+/**
+ * @brief 
+ * 
+ * @param testFileList 
+ * @param lineQueue 
+ */
+void readerTask(std::queue<std::string> testFileList, std::queue<std::string> lineQueue)
+{
+    unsigned int filesRemaining;
+    std::string testFile;
+    #pragma omp critical
+    filesRemaining = testFileList.size();
+    while (filesRemaining != 0)
+    {
+        #pragma omp critical
+        {
+            testFile = testFileList.front();
+            testFileList.pop();
+            filesRemaining = testFileList.size();
+        }
+        populateLineQueue(testFile, lineQueue);
+    }
 }
 
 /**
@@ -220,13 +252,13 @@ void populateWordMap(const std::string &line, std::map<std::string, int> &wordMa
     }
 }
 
-void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles)
-{
-    std::queue<std::string> testFilePaths;
-    std::string testPath = "../test/files";
-    for (const auto & entry : std::filesystem::directory_iterator(testPath))
-    {
-        testFiles.push(entry.path().string());
-    }
-}
+// void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles)
+// {
+//     std::queue<std::string> testFilePaths;
+//     std::string testPath = "../test/files";
+//     for (const auto & entry : std::filesystem::directory_iterator(testPath))
+//     {
+//         testFiles.push(entry.path().string());
+//     }
+// }
     

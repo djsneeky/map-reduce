@@ -34,6 +34,6 @@ TEST(MapReduceTest, TestGetReducerQueueId_BasicPass) {
 TEST(MapReduceTest, TestAddTestFiles_BasicPass) {
     std::queue<std::string> testFiles;
 
-    addTestFiles("../test/files", testFiles);
+    // addTestFiles("../test/files", testFiles);
     EXPECT_EQ(testFiles.front(), "../test/files/1.txt");
 }

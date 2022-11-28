@@ -9,6 +9,7 @@
 void mapReduceParallel();
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, int maxReducers);
+void readerTask(std::queue<std::string> testFileList, std::queue<std::string> lineQueue);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 void populateWordMap(const std::string& line, std::map<std::string, int>& wordMap, char delim);
