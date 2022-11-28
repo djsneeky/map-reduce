@@ -8,12 +8,16 @@
 #include <cstdbool>
 #include <iostream>
 #include <omp.h>
-// #include <filesystem>
+#include <filesystem>
+#include "FileHelper.h"
 
 // openmp function that runs on each proc
 void mapReduceParallel()
 {
+
     int max_threads = omp_get_max_threads();
+
+    std::vector<std::string> testFiles = getListOfTestFiles();;
 
     // queues for lines - one for each mapper thread
     std::vector<std::queue<std::string>> lineQueues;

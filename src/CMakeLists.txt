@@ -5,7 +5,7 @@ add_executable(${BINARY} ${SOURCES})
 
 # Create library of sources minus main.cpp for testing
 set(SRC_LIB ${CMAKE_PROJECT_NAME}_lib)
-add_library(${SRC_LIB} STATIC MapReduce.cpp)
+add_library(${SRC_LIB} STATIC MapReduce.cpp FileHelper.cpp)
 target_include_directories(${SRC_LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(OpenMP)
