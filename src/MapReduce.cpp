@@ -8,6 +8,7 @@
 #include <cstdbool>
 #include <iostream>
 #include <omp.h>
+#include <filesystem>
 
 // openmp function that runs on each proc
 void mapReduceParallel()
@@ -45,18 +46,17 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
-    // reader thread reads files and put lines of file into queues
-    // reader thread requests file when no remaining work
-    // populateLineQueues("../test/files/jungle.txt", lineQueues);
-
     #pragma omp parallel
     {
+        // Reader threads
         #pragma omp single nowait
         {
-            // check if there are files to read
-            // read file and populate line queues
+            // reader thread reads files and put lines of file into queues
+            // reader thread requests file when no remaining work
+            populateLineQueues("../test/files/jungle.txt", lineQueues);
         }
 
+        // Mapper threads
         #pragma omp single nowait
         {
             // get the thread id
@@ -83,6 +83,7 @@ void mapReduceParallel()
             }
         }
 
+        // Reducer threads
         #pragma omp single nowait
         {
             // reducer thread receives pair from queue and updates its map
@@ -169,6 +170,7 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
     {
         return false;
     }
+    
 }
 
 /**
@@ -217,3 +219,14 @@ void populateWordMap(const std::string &line, std::map<std::string, int> &wordMa
         wordMap[word]++;
     }
 }
+
+void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles)
+{
+    std::queue<std::string> testFilePaths;
+    std::string testPath = "../test/files";
+    for (const auto & entry : std::filesystem::directory_iterator(testPath))
+    {
+        testFiles.push(entry.path().string());
+    }
+}
+    
