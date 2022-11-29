@@ -11,6 +11,19 @@
 #include <filesystem>
 #include "FileHelper.h"
 
+typedef struct line_queue
+{
+    std::queue<std::string> line;
+    omp_lock_t lock;
+} line_queue_t;
+
+typedef struct reducer_queue
+{
+    std::queue<std::pair<std::string, int>> wordQueue;
+    omp_lock_t lock;
+} reducer_queue_t;
+
+
 // openmp function that runs on each proc
 void mapReduceParallel()
 {
@@ -20,10 +33,12 @@ void mapReduceParallel()
     std::vector<std::string> testFiles = getListOfTestFiles();;
 
     // queues for lines - one for each mapper thread
-    std::vector<std::queue<std::string>> lineQueues;
+    std::vector<line_queue_t*> lineQueues;
     for (int i = 0; i < max_threads; i++)
     {
-        lineQueues.push_back(std::queue<std::string>());
+        line_queue_t* newQueue = new line_queue_t;
+        omp_init_lock(&(newQueue->lock));
+        lineQueues.push_back(newQueue);
     }
 
     // word maps - one for each mapper thread
@@ -37,10 +52,12 @@ void mapReduceParallel()
     const std::hash<std::string> wordHashFn;
 
     // create reducer queues
-    std::vector<std::queue<std::pair<std::string, int>>> reducerQueues;
+    std::vector<reducer_queue_t*> reducerQueues;
     for (int i = 0; i < max_threads; i++)
     {
-        reducerQueues.push_back(std::queue<std::pair<std::string, int>>());
+        reducer_queue_t* newReducerQueue = new reducer_queue_t;
+        omp_init_lock(&(newReducerQueue->lock));
+        reducerQueues.push_back(newReducerQueue);
     }
 
     // create reducer maps
@@ -54,6 +71,8 @@ void mapReduceParallel()
     // addTestFiles("../test/files", testFileList);
 
     unsigned int readerThreadCount = omp_get_max_threads();
+    unsigned int mapperThreadCount = omp_get_max_threads();
+    unsigned int reducerThreadCount = omp_get_max_threads();
 
     #pragma omp parallel
     {
@@ -74,25 +93,12 @@ void mapReduceParallel()
         // Mapper threads
         #pragma omp single nowait
         {
-            // check to see that there are lines available in the queue
-            while (!lineQueues[thread_id].empty())
+            for (int i = 0; i < mapperThreadCount; i++)
             {
-                // map thread to read line queues and place words into thread local word map
-                populateWordMap(lineQueues[thread_id].front(), wordMaps[thread_id], ' ');
-                lineQueues[thread_id].pop();
-            }
-            // map map thread will put pairs onto queues for for each reducer
-            // split words in map to other 'reducer' queues
-            unsigned int reducerQueueId;
-            std::map<std::string, int>::iterator it;
-            for (it = wordMaps[thread_id].begin(); it != wordMaps[thread_id].end(); it++)
-            {
-                // get the dest reducer id
-                reducerQueueId = getReducerQueueId(it->first, wordHashFn, max_threads);
-                // send to reducer 
-                reducerQueues[reducerQueueId].push(std::make_pair(it->first, it->second));
-                // remove pair from map
-                wordMaps[thread_id].erase(it);
+                #pragma omp task
+                {
+                    mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues);
+                }
             }
         }
 
@@ -100,6 +106,13 @@ void mapReduceParallel()
         #pragma omp single nowait
         {
             // reducer thread receives pair from queue and updates its map
+            for (int i = 0; i < reducerThreadCount; i++)
+            {
+                #pragma omp task
+                {
+                    reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
+                }
+            }
         }
     }
 }
@@ -142,19 +155,98 @@ bool mapReduceSerial()
 }
 
 /**
- * @brief Takes a word and a hash function and returns its desired reducer queue destination
- *
- * @param wordMap a reference to the word map to reduce
- * @param wordHashFn a reference to the hash function
- * @param maxReducers the max number of reducers used
- *
- * @return the reducer queue id number
+ * @brief 
+ * 
+ * @param testFileList 
+ * @param lineQueue 
  */
-unsigned int getReducerQueueId(const std::string &word, const std::hash<std::string> &wordHashFn, int maxReducers)
+void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue)
 {
-    unsigned int num = wordHashFn(word) % maxReducers;
+    unsigned int filesRemaining;
+    std::string testFile;
+    #pragma omp critical
+    filesRemaining = testFileList.size();
+    while (filesRemaining != 0)
+    {
+        #pragma omp critical
+        {
+            testFile = testFileList.front();
+            testFileList.pop();
+            filesRemaining = testFileList.size();
+        }
+        populateLineQueue(testFile, lineQueue);
+    }
+}
 
-    return num;
+void mapperTask(line_queue_t* lineQueue, 
+                std::map<std::string, int> &wordMap, 
+                std::vector<reducer_queue_t*> &reducerQueues,
+                unsigned int reducerCount)
+{
+    // check to see that there are lines available in the queue
+    omp_set_lock(&(lineQueue->lock));
+    unsigned int linesRemaining = lineQueue.size();
+    omp_unset_lock(&(lineQueue->lock));
+    while (linesRemaining != 0)
+    {
+        // map thread to read line queues and place words into thread local word map
+        omp_set_lock(&(lineQueue->lock));
+        std::string line = lineQueue.front();
+        lineQueue.pop();
+        omp_unset_lock(&(lineQueue->lock));
+        populateWordMap(line, wordMap, ' ');
+    }
+    // map thread will put pairs onto queues for for each reducer
+    // split words in map to other 'reducer' queues
+    unsigned int reducerQueueId;
+    std::map<std::string, int>::iterator it;
+    for (it = wordMap.begin(); it != wordMap.end(); it++)
+    {
+        // get the dest reducer id
+        reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
+        // send to reducer
+        // TODO: consider vector of pairs to reduce critical section bottleneck
+        omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
+        reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
+        omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
+        // remove pair from local map
+        wordMap.erase(it);
+    }
+}
+
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reducerMap)
+{
+    return;
+}
+
+/**
+ * @brief Reads a file line by line and populates a line queue
+ *
+ * Used by the reader threads
+ *
+ * @param fileName the absolute path of the file
+ * @param lineQueue the queue to populate
+ * @return true if the file has been processed successfully, false otherwise
+ */
+bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
+{
+    std::ifstream file(fileName);
+    if (file.is_open())
+    {
+        std::string newLine;
+        while (std::getline(file, newLine))
+        {
+            omp_set_lock(&(lineQueue->lock));
+            lineQueue->line.push(newLine);
+            omp_unset_lock(&(lineQueue->lock));
+        }
+        file.close();
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 /**
@@ -186,58 +278,6 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
 }
 
 /**
- * @brief 
- * 
- * @param testFileList 
- * @param lineQueue 
- */
-void readerTask(std::queue<std::string> testFileList, std::queue<std::string> lineQueue)
-{
-    unsigned int filesRemaining;
-    std::string testFile;
-    #pragma omp critical
-    filesRemaining = testFileList.size();
-    while (filesRemaining != 0)
-    {
-        #pragma omp critical
-        {
-            testFile = testFileList.front();
-            testFileList.pop();
-            filesRemaining = testFileList.size();
-        }
-        populateLineQueue(testFile, lineQueue);
-    }
-}
-
-/**
- * @brief Reads a file line by line and populates a line queue
- *
- * Used by the reader threads
- *
- * @param fileName the absolute path of the file
- * @param lineQueue the queue to populate
- * @return true if the file has been processed successfully, false otherwise
- */
-bool populateLineQueue(const std::string &fileName, std::queue<std::string> &lineQueue)
-{
-    std::ifstream file(fileName);
-    if (file.is_open())
-    {
-        std::string line;
-        while (std::getline(file, line))
-        {
-            lineQueue.push(line);
-        }
-        file.close();
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-/**
  * @brief Takes a line and puts words into a map
  *
  * Used by the mapper threads
@@ -254,6 +294,22 @@ void populateWordMap(const std::string &line, std::map<std::string, int> &wordMa
     {
         wordMap[word]++;
     }
+}
+
+/**
+ * @brief Takes a word and a hash function and returns its desired reducer queue destination
+ *
+ * @param wordMap a reference to the word map to reduce
+ * @param wordHashFn a reference to the hash function
+ * @param maxReducers the max number of reducers used
+ *
+ * @return the reducer queue id number
+ */
+unsigned int getReducerQueueId(const std::string &word, const std::hash<std::string> &wordHashFn, const unsigned int maxReducers)
+{
+    unsigned int num = wordHashFn(word) % maxReducers;
+
+    return num;
 }
 
 // void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles)
