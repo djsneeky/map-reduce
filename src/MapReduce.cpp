@@ -77,17 +77,17 @@ void mapReduceParallel()
             }
         }
 
-        // Mapper threads
-        #pragma omp single nowait
-        {
-            for (int i = 0; i < mapperThreadCount; i++)
-            {
-                #pragma omp task
-                {
-                    mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn);
-                }
-            }
-        }
+        // // Mapper threads
+        // #pragma omp single nowait
+        // {
+        //     for (int i = 0; i < mapperThreadCount; i++)
+        //     {
+        //         #pragma omp task
+        //         {
+        //             mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn);
+        //         }
+        //     }
+        // }
 
         // // Reducer threads
         // #pragma omp single nowait
@@ -157,15 +157,14 @@ void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue)
     {
         #pragma omp critical
         {
-            testFile = testFileList.back();
-            testFileList.pop_back();
+            filesRemaining = testFileList.size();
+            if(filesRemaining != 0)
+            {
+                testFile = testFileList.back();
+                testFileList.pop_back();
+            }
         }
         populateLineQueue(testFile, lineQueue);
-        #pragma omp critical
-        {
-            filesRemaining = testFileList.size();
-        }
-
     }
 }
 
@@ -179,13 +178,20 @@ void mapperTask(line_queue_t* lineQueue,
     omp_set_lock(&(lineQueue->lock));
     unsigned int linesRemaining = lineQueue->line.size();
     omp_unset_lock(&(lineQueue->lock));
+    std::cout << "linesRemaining " << linesRemaining << std::endl;
     while (linesRemaining != 0)
     {
+        std::string line;
         // map thread to read line queues and place words into thread local word map
         omp_set_lock(&(lineQueue->lock));
-        std::string line = lineQueue->line.back();
-        lineQueue->line.pop_back();
+        linesRemaining = lineQueue->line.size();
+        if(linesRemaining != 0) 
+        {
+            line = lineQueue->line.back();
+            lineQueue->line.pop_back();
+        }
         omp_unset_lock(&(lineQueue->lock));
+
         populateWordMap(line, wordMap, ' ');
     }
     // map thread will put pairs onto queues for for each reducer
@@ -323,12 +329,16 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
  */
 void populateWordMap(const std::string &line, std::map<std::string, int> &wordMap, char delim)
 {
-    std::istringstream iss(line);
-    std::string word;
-    while (std::getline(iss, word, delim))
+    if (line.size() != 0)
     {
-        wordMap[word]++;
+        std::istringstream iss(line);
+        std::string word;
+        while (std::getline(iss, word, delim))
+        {
+            wordMap[word]++;
+        }
     }
+
 }
 
 /**
