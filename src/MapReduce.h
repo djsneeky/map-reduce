@@ -5,17 +5,34 @@
 #include <string>
 #include <cstdbool>
 #include <queue>
+#include <omp.h>
+
+
+struct line_queue_t
+{
+    std::queue<std::string> line;
+    omp_lock_t lock;
+};
+
+struct reducer_queue_t
+{
+    std::queue<std::pair<std::string, int>> wordQueue;
+    omp_lock_t lock;
+};
 
 void mapReduceParallel();
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, const unsigned int maxReducers);
-void readerTask(std::queue<std::string> testFileList, std::queue<std::string> lineQueue);
-void mapperTask(std::queue<std::string> &lineQueue, 
+void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue);
+void mapperTask(line_queue_t* lineQueue, 
                 std::map<std::string, int> &wordMap, 
-                std::vector<std::queue<std::pair<std::string, int>>> &reducerQueues,
-                unsigned int reducerCount);
+                std::vector<reducer_queue_t*> &reducerQueues,
+                unsigned int reducerCount,
+                const std::hash<std::string> &wordHashFn);
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reducerMap);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
+bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);
 void populateWordMap(const std::string& line, std::map<std::string, int>& wordMap, char delim);
 void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles);
 

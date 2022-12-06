@@ -7,22 +7,8 @@
 #include <sstream>
 #include <cstdbool>
 #include <iostream>
-#include <omp.h>
 #include <filesystem>
 #include "FileHelper.h"
-
-typedef struct line_queue
-{
-    std::queue<std::string> line;
-    omp_lock_t lock;
-} line_queue_t;
-
-typedef struct reducer_queue
-{
-    std::queue<std::pair<std::string, int>> wordQueue;
-    omp_lock_t lock;
-} reducer_queue_t;
-
 
 // openmp function that runs on each proc
 void mapReduceParallel()
@@ -30,7 +16,7 @@ void mapReduceParallel()
 
     int max_threads = omp_get_max_threads();
 
-    std::vector<std::string> testFiles = getListOfTestFiles();;
+    std::vector<std::string> testFiles = getListOfTestFiles();
 
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
@@ -97,7 +83,7 @@ void mapReduceParallel()
             {
                 #pragma omp task
                 {
-                    mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues);
+                    mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn);
                 }
             }
         }
@@ -181,18 +167,19 @@ void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue)
 void mapperTask(line_queue_t* lineQueue, 
                 std::map<std::string, int> &wordMap, 
                 std::vector<reducer_queue_t*> &reducerQueues,
-                unsigned int reducerCount)
+                unsigned int reducerCount,
+                const std::hash<std::string> &wordHashFn)
 {
     // check to see that there are lines available in the queue
     omp_set_lock(&(lineQueue->lock));
-    unsigned int linesRemaining = lineQueue.size();
+    unsigned int linesRemaining = lineQueue->line.size();
     omp_unset_lock(&(lineQueue->lock));
     while (linesRemaining != 0)
     {
         // map thread to read line queues and place words into thread local word map
         omp_set_lock(&(lineQueue->lock));
-        std::string line = lineQueue.front();
-        lineQueue.pop();
+        std::string line = lineQueue->line.front();
+        lineQueue->line.pop();
         omp_unset_lock(&(lineQueue->lock));
         populateWordMap(line, wordMap, ' ');
     }
@@ -247,6 +234,21 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
     {
         return false;
     }
+}
+
+/**
+ * @brief Reads a file line by line and populates a line queue
+ *
+ * Used by the reader threads
+ *
+ * @param fileName the absolute path of the file
+ * @param lineQueue the queue to populate
+ * @return true if the file has been processed successfully, false otherwise
+ */
+bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue)
+{
+    //TODO: define impl
+    return false;
 }
 
 /**
