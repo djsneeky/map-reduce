@@ -77,17 +77,18 @@ void mapReduceParallel()
             }
         }
 
-        // // Mapper threads
-        // #pragma omp single nowait
-        // {
-        //     for (int i = 0; i < mapperThreadCount; i++)
-        //     {
-        //         #pragma omp task
-        //         {
-        //             mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn);
-        //         }
-        //     }
-        // }
+        // Mapper threads
+        #pragma omp single nowait
+        {
+            for (int i = 0; i < mapperThreadCount; i++)
+            {
+                #pragma omp task
+                {
+                    thread_id = omp_get_thread_num();
+                    mapperTask(lineQueues[thread_id], wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn);
+                }
+            }
+        }
 
         // // Reducer threads
         // #pragma omp single nowait
@@ -177,8 +178,8 @@ void mapperTask(line_queue_t* lineQueue,
     // check to see that there are lines available in the queue
     omp_set_lock(&(lineQueue->lock));
     unsigned int linesRemaining = lineQueue->line.size();
+    // std::cout << linesRemaining << std::endl;
     omp_unset_lock(&(lineQueue->lock));
-    std::cout << "linesRemaining " << linesRemaining << std::endl;
     while (linesRemaining != 0)
     {
         std::string line;
@@ -229,7 +230,6 @@ void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reduc
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
 {
     std::ifstream file(fileName);
-    int counter = 0;
     if (file.is_open())
     {
         std::string newLine;
@@ -261,31 +261,20 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
  */
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue)
 {
-    std::cout << "start populateLineQueue " << std::endl;
     std::ifstream file(fileName);
-    std::cout <<"fileNameL " << fileName << std::endl;
     int counter = 0;
     if (file.is_open())
     {
         std::string newLine;
         while (std::getline(file, newLine))
-        // while (counter < 100)
         {
-            std::cout<< "read line: "<< ++counter<< std::endl;
-            // std::cout << "line " << newLine << std::endl;
-            // omp_set_lock(&(lineQueue->lock));
-            // lineQueue->line.push_back(newLine);
-            // omp_unset_lock(&(lineQueue->lock));
+            lineQueue.push(newLine);
         }
         file.close();
-        std::cout << "end true populateLineQueue " << std::endl;
-
         return true;
     }
     else
     {
-        std::cout << "end false populateLineQueue " << std::endl;
-
         return false;
     }
 }
