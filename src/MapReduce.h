@@ -33,7 +33,7 @@ void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reduc
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);
-void populateWordMap(const std::string& line, std::map<std::string, int>& wordMap, char delim);
+void populateWordMap(std::string& line, std::map<std::string, int>& wordMap);
 void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles);
 
 #endif

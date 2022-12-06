@@ -8,6 +8,8 @@
 #include <cstdbool>
 #include <iostream>
 #include <filesystem>
+#include <regex>
+
 #include "FileHelper.h"
 
 // openmp function that runs on each proc
@@ -127,7 +129,7 @@ bool mapReduceSerial()
     // read lines out of queue and populate a map
     while (!lineQueue.empty())
     {
-        populateWordMap(lineQueue.front(), wordMap, ' ');
+        populateWordMap(lineQueue.front(), wordMap);
         lineQueue.pop();
     }
 
@@ -176,6 +178,7 @@ void mapperTask(line_queue_t* lineQueue,
                 const std::hash<std::string> &wordHashFn)
 {
     // check to see that there are lines available in the queue
+    std::string line;
     omp_set_lock(&(lineQueue->lock));
     unsigned int linesRemaining = lineQueue->line.size();
     // std::cout << linesRemaining << std::endl;
@@ -193,7 +196,7 @@ void mapperTask(line_queue_t* lineQueue,
         }
         omp_unset_lock(&(lineQueue->lock));
 
-        populateWordMap(line, wordMap, ' ');
+        populateWordMap(line, wordMap);
     }
     // map thread will put pairs onto queues for for each reducer
     // split words in map to other 'reducer' queues
@@ -208,9 +211,9 @@ void mapperTask(line_queue_t* lineQueue,
         omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
         reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
         omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
-        // remove pair from local map
-        wordMap.erase(it);
     }
+    // clear the word map
+    wordMap.clear();
 }
 
 void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reducerMap)
@@ -314,20 +317,25 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
  *
  * @param line a string to process
  * @param word_map a reference to the map to populate
- * @param delim the delimiter used to find word boundaries
  */
-void populateWordMap(const std::string &line, std::map<std::string, int> &wordMap, char delim)
+void populateWordMap(std::string &line, std::map<std::string, int> &wordMap)
 {
     if (line.size() != 0)
     {
-        std::istringstream iss(line);
-        std::string word;
-        while (std::getline(iss, word, delim))
+        std::stringstream stringStream(line);
+        while(std::getline(stringStream, line))
         {
-            wordMap[word]++;
+            std::size_t prev = 0, pos;
+            while ((pos = line.find_first_of(" ';:,-<>.\"!?_*", prev)) != std::string::npos)
+            {
+                if (pos > prev)
+                    wordMap[line.substr(prev, pos-prev)]++;
+                prev = pos+1;
+            }
+            if (prev < line.length())
+                wordMap[line.substr(prev, std::string::npos)]++;
         }
     }
-
 }
 
 /**
@@ -345,14 +353,4 @@ unsigned int getReducerQueueId(const std::string &word, const std::hash<std::str
 
     return num;
 }
-
-// void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles)
-// {
-//     std::queue<std::string> testFilePaths;
-//     std::string testPath = "../test/files";
-//     for (const auto & entry : std::filesystem::directory_iterator(testPath))
-//     {
-//         testFiles.push(entry.path().string());
-//     }
-// }
     
