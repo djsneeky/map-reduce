@@ -15,7 +15,6 @@ void mapReduceParallel()
 {
 
     int max_threads = omp_get_max_threads();
-
     std::vector<std::string> testFiles = getListOfTestFiles();
 
     // queues for lines - one for each mapper thread
@@ -53,7 +52,7 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
-    std::queue<std::string> testFileList;
+    // std::queue<std::string> testFileList;
     // addTestFiles("../test/files", testFileList);
 
     unsigned int readerThreadCount = omp_get_max_threads();
@@ -62,7 +61,7 @@ void mapReduceParallel()
 
     #pragma omp parallel
     {
-        int thread_id = omp_get_thread_num();
+        int thread_id;
         // Reader threads
         #pragma omp single nowait
         {
@@ -70,8 +69,10 @@ void mapReduceParallel()
             {
                 #pragma omp task
                 {
+                    thread_id = omp_get_thread_num();
+
                     // takes a file list and populates a thread specific line queue
-                    readerTask(testFileList, lineQueues[thread_id]);
+                    readerTask(testFiles, lineQueues[thread_id]);
                 }
             }
         }
@@ -88,18 +89,18 @@ void mapReduceParallel()
             }
         }
 
-        // Reducer threads
-        #pragma omp single nowait
-        {
-            // reducer thread receives pair from queue and updates its map
-            for (int i = 0; i < reducerThreadCount; i++)
-            {
-                #pragma omp task
-                {
-                    reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
-                }
-            }
-        }
+        // // Reducer threads
+        // #pragma omp single nowait
+        // {
+        //     // reducer thread receives pair from queue and updates its map
+        //     for (int i = 0; i < reducerThreadCount; i++)
+        //     {
+        //         #pragma omp task
+        //         {
+        //             reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -117,7 +118,7 @@ bool mapReduceSerial()
     // read file and put lines into a queue
     std::queue<std::string> lineQueue;
     std::map<std::string, int> wordMap;
-    if (!populateLineQueue("../test/files/jungle.txt", lineQueue))
+    if (!populateLineQueue("../test/files/16.txt", lineQueue))
     {
         return false;
     }
@@ -146,7 +147,7 @@ bool mapReduceSerial()
  * @param testFileList 
  * @param lineQueue 
  */
-void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue)
+void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue)
 {
     unsigned int filesRemaining;
     std::string testFile;
@@ -156,11 +157,15 @@ void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue)
     {
         #pragma omp critical
         {
-            testFile = testFileList.front();
-            testFileList.pop();
-            filesRemaining = testFileList.size();
+            testFile = testFileList.back();
+            testFileList.pop_back();
         }
         populateLineQueue(testFile, lineQueue);
+        #pragma omp critical
+        {
+            filesRemaining = testFileList.size();
+        }
+
     }
 }
 
@@ -178,8 +183,8 @@ void mapperTask(line_queue_t* lineQueue,
     {
         // map thread to read line queues and place words into thread local word map
         omp_set_lock(&(lineQueue->lock));
-        std::string line = lineQueue->line.front();
-        lineQueue->line.pop();
+        std::string line = lineQueue->line.back();
+        lineQueue->line.pop_back();
         omp_unset_lock(&(lineQueue->lock));
         populateWordMap(line, wordMap, ' ');
     }
@@ -218,13 +223,14 @@ void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reduc
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
 {
     std::ifstream file(fileName);
+    int counter = 0;
     if (file.is_open())
     {
         std::string newLine;
         while (std::getline(file, newLine))
         {
             omp_set_lock(&(lineQueue->lock));
-            lineQueue->line.push(newLine);
+            lineQueue->line.push_back(newLine);
             omp_unset_lock(&(lineQueue->lock));
         }
         file.close();
@@ -232,8 +238,10 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
     }
     else
     {
+
         return false;
     }
+
 }
 
 /**
@@ -247,8 +255,33 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
  */
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue)
 {
-    //TODO: define impl
-    return false;
+    std::cout << "start populateLineQueue " << std::endl;
+    std::ifstream file(fileName);
+    std::cout <<"fileNameL " << fileName << std::endl;
+    int counter = 0;
+    if (file.is_open())
+    {
+        std::string newLine;
+        while (std::getline(file, newLine))
+        // while (counter < 100)
+        {
+            std::cout<< "read line: "<< ++counter<< std::endl;
+            // std::cout << "line " << newLine << std::endl;
+            // omp_set_lock(&(lineQueue->lock));
+            // lineQueue->line.push_back(newLine);
+            // omp_unset_lock(&(lineQueue->lock));
+        }
+        file.close();
+        std::cout << "end true populateLineQueue " << std::endl;
+
+        return true;
+    }
+    else
+    {
+        std::cout << "end false populateLineQueue " << std::endl;
+
+        return false;
+    }
 }
 
 /**

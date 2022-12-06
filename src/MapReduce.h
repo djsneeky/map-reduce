@@ -10,7 +10,7 @@
 
 struct line_queue_t
 {
-    std::queue<std::string> line;
+    std::vector<std::string> line;
     omp_lock_t lock;
 };
 
@@ -23,7 +23,7 @@ struct reducer_queue_t
 void mapReduceParallel();
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, const unsigned int maxReducers);
-void readerTask(std::queue<std::string> &testFileList, line_queue_t* lineQueue);
+void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue);
 void mapperTask(line_queue_t* lineQueue, 
                 std::map<std::string, int> &wordMap, 
                 std::vector<reducer_queue_t*> &reducerQueues,
