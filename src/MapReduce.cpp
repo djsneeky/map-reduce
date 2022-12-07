@@ -54,8 +54,6 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
-    // TODO: Add write output file lock
-
     unsigned int readerThreadCount = omp_get_max_threads();
     unsigned int mapperThreadCount = omp_get_max_threads();
     unsigned int reducerThreadCount = omp_get_max_threads();
