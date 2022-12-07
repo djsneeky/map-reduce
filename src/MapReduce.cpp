@@ -54,8 +54,7 @@ void mapReduceParallel()
         reducerMaps.push_back(std::map<std::string, int>());
     }
 
-    // std::queue<std::string> testFileList;
-    // addTestFiles("../test/files", testFileList);
+    // TODO: Add write output file lock
 
     unsigned int readerThreadCount = omp_get_max_threads();
     unsigned int mapperThreadCount = omp_get_max_threads();
@@ -92,19 +91,45 @@ void mapReduceParallel()
             }
         }
 
-        // // Reducer threads
-        // #pragma omp single nowait
-        // {
-        //     // reducer thread receives pair from queue and updates its map
-        //     for (int i = 0; i < reducerThreadCount; i++)
-        //     {
-        //         #pragma omp task
-        //         {
-        //             reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
-        //         }
-        //     }
-        // }
+        // Reducer threads
+        #pragma omp single nowait
+        {
+            // reducer thread receives pair from queue and updates its map
+            for (int i = 0; i < reducerThreadCount; i++)
+            {
+                #pragma omp task
+                {
+                    thread_id = omp_get_thread_num();
+                    reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
+                }
+            }
+        }
     }
+
+    // create output file and lock
+    std::ofstream outFile;
+    outFile.open("build/output.txt", std::ios::trunc | std::ios::out);
+    // clean the file
+    std::cout << "Writing to output file..." << std::endl;
+
+    // TODO: output all pairs to a file
+    #pragma omp parallel
+    {
+        int thread_id;
+        #pragma omp single
+        {
+            for (int i = 0; i < reducerThreadCount; i++)
+            {
+                #pragma omp task
+                {
+                    thread_id = omp_get_thread_num();
+                    writerTask(reducerMaps[thread_id], outFile);
+                }
+            }
+        }
+    }
+
+    outFile.close();
 }
 
 /**
@@ -145,10 +170,10 @@ bool mapReduceSerial()
 }
 
 /**
- * @brief 
+ * @brief Takes a file list and populates a thread's line queue
  * 
- * @param testFileList 
- * @param lineQueue 
+ * @param testFileList a list of file paths
+ * @param lineQueue a pointer to the line queue
  */
 void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue)
 {
@@ -171,6 +196,16 @@ void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue)
     }
 }
 
+/**
+ * @brief Map threads read line queues and place pairs into a local word map.
+ *        Then the thread will place hashed word pairs onto reducer queues.
+ * 
+ * @param lineQueue a pointer to the line queue
+ * @param wordMap a thread specific word map
+ * @param reducerQueues a reference to a list of reducer queues
+ * @param reducerCount the max number of reducer threads
+ * @param wordHashFn a hash function used to map words to reducer queues
+ */
 void mapperTask(line_queue_t* lineQueue, 
                 std::map<std::string, int> &wordMap, 
                 std::vector<reducer_queue_t*> &reducerQueues,
@@ -216,9 +251,47 @@ void mapperTask(line_queue_t* lineQueue,
     wordMap.clear();
 }
 
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reducerMap)
+/**
+ * @brief Takes pairs out of a reducer queue and adds them to a final reducer map
+ * 
+ * @param reducerQueue a pointer to the reducer queue of pairs
+ * @param reducerMap a thread specific reducer map
+ */
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap)
 {
-    return;
+    std::pair<std::string, int> pair;
+    std::pair<std::map<std::string, int>::iterator, bool> ret;
+    // TODO: minimize locking on reducer queue
+    omp_set_lock(&(reducerQueue->lock));
+    while (!reducerQueue->wordQueue.empty())
+    {
+        pair = reducerQueue->wordQueue.front();
+        reducerQueue->wordQueue.pop();
+        // TODO: Evaluate a more efficient method to add to a reducer map
+        ret = reducerMap.insert(pair);
+        // if element already exists, add to the count
+        if (ret.second = false)
+        {
+            reducerMap[pair.first] += pair.second;
+        }
+    }
+    omp_unset_lock(&(reducerQueue->lock));
+}
+
+/**
+ * @brief Takes a reducer map and writes it out to a file
+ * 
+ * @param reducerMap a reference to a reducer map
+ * 
+ */
+void writerTask(std::map<std::string, int> &reducerMap, std::ofstream &output)
+{
+    // TODO: Consider using a single queue to write to output file to reduce contention
+    for (auto it = reducerMap.begin(); it != reducerMap.end(); it++)
+    {
+        #pragma omp critical
+        output << it->first << " " << it->second << std::endl;
+    }
 }
 
 /**

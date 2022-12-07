@@ -29,7 +29,8 @@ void mapperTask(line_queue_t* lineQueue,
                 std::vector<reducer_queue_t*> &reducerQueues,
                 unsigned int reducerCount,
                 const std::hash<std::string> &wordHashFn);
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> reducerMap);
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap);
+void writerTask(std::map<std::string, int> &reducerMap, std::ofstream &output);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);
