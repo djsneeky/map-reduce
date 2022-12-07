@@ -12,6 +12,7 @@ struct line_queue_t
 {
     std::vector<std::string> line;
     omp_lock_t lock;
+    bool filled;
 };
 
 struct reducer_queue_t

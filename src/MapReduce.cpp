@@ -25,6 +25,7 @@ void mapReduceParallel()
     {
         line_queue_t* newQueue = new line_queue_t;
         omp_init_lock(&(newQueue->lock));
+        newQueue->filled = false;
         lineQueues.push_back(newQueue);
     }
 
@@ -192,6 +193,9 @@ void readerTask(std::vector<std::string> &testFileList, line_queue_t* lineQueue)
         }
         populateLineQueue(testFile, lineQueue);
     }
+    
+    // if no files remaining, consider existing line queue as completed
+    lineQueue->filled = true;
 }
 
 /**
@@ -210,43 +214,45 @@ void mapperTask(line_queue_t* lineQueue,
                 unsigned int reducerCount,
                 const std::hash<std::string> &wordHashFn)
 {
-    // check to see that there are lines available in the queue
-    std::string line;
-    omp_set_lock(&(lineQueue->lock));
-    unsigned int linesRemaining = lineQueue->line.size();
-    // std::cout << linesRemaining << std::endl;
-    omp_unset_lock(&(lineQueue->lock));
-    while (linesRemaining != 0)
+    while (!lineQueue->filled || lineQueue->line.size() != 0)
     {
+        // check to see that there are lines available in the queue
         std::string line;
-        // map thread to read line queues and place words into thread local word map
         omp_set_lock(&(lineQueue->lock));
-        linesRemaining = lineQueue->line.size();
-        if(linesRemaining != 0) 
-        {
-            line = lineQueue->line.back();
-            lineQueue->line.pop_back();
-        }
+        unsigned int linesRemaining = lineQueue->line.size();
         omp_unset_lock(&(lineQueue->lock));
+        while (linesRemaining != 0)
+        {
+            std::string line;
+            // map thread to read line queues and place words into thread local word map
+            omp_set_lock(&(lineQueue->lock));
+            linesRemaining = lineQueue->line.size();
+            if(linesRemaining != 0) 
+            {
+                line = lineQueue->line.back();
+                lineQueue->line.pop_back();
+            }
+            omp_unset_lock(&(lineQueue->lock));
 
-        populateWordMap(line, wordMap);
+            populateWordMap(line, wordMap);
+        }
+        // map thread will put pairs onto queues for for each reducer
+        // split words in map to other 'reducer' queues
+        unsigned int reducerQueueId;
+        std::map<std::string, int>::iterator it;
+        for (it = wordMap.begin(); it != wordMap.end(); it++)
+        {
+            // get the dest reducer id
+            reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
+            // send to reducer
+            // TODO: consider vector of pairs to reduce critical section bottleneck
+            omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
+            reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
+            omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
+        }
+        // clear the word map
+        wordMap.clear();
     }
-    // map thread will put pairs onto queues for for each reducer
-    // split words in map to other 'reducer' queues
-    unsigned int reducerQueueId;
-    std::map<std::string, int>::iterator it;
-    for (it = wordMap.begin(); it != wordMap.end(); it++)
-    {
-        // get the dest reducer id
-        reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
-        // send to reducer
-        // TODO: consider vector of pairs to reduce critical section bottleneck
-        omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
-        reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
-        omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
-    }
-    // clear the word map
-    wordMap.clear();
 }
 
 /**
@@ -318,7 +324,6 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
     }
     else
     {
-
         return false;
     }
 
@@ -397,7 +402,7 @@ void populateWordMap(std::string &line, std::map<std::string, int> &wordMap)
         while(std::getline(stringStream, line))
         {
             std::size_t prev = 0, pos;
-            while ((pos = line.find_first_of(" ';:,-<>.\"!?_*", prev)) != std::string::npos)
+            while ((pos = line.find_first_of(" ';:,-<>.\"!?_*()", prev)) != std::string::npos)
             {
                 if (pos > prev)
                     wordMap[line.substr(prev, pos-prev)]++;
