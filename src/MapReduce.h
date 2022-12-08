@@ -22,6 +22,7 @@ struct reducer_queue_t
 {
     std::queue<std::pair<std::string, int>> wordQueue;
     omp_lock_t lock;
+    bool filled;
 };
 
 void mapReduceParallel();
@@ -33,8 +34,9 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 std::vector<reducer_queue_t*> &reducerQueues,
                 unsigned int reducerCount,
                 const std::hash<std::string> &wordHashFn,
-                volatile bool* finishedPopulatingLineQueues);
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap);
+                volatile bool *finishedPopulatingLineQueues,
+                volatile bool *finishedMappingLineQueues);
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile bool *finishedMappingLineQueues);
 void writerTask(std::map<std::string, int> &reducerMap, std::ofstream &output);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);

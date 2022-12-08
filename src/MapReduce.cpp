@@ -22,6 +22,7 @@ void mapReduceParallel()
     int max_threads = omp_get_max_threads();
     std::vector<std::string> testFiles = getListOfTestFiles();
     volatile bool finishedPopulatingLineQueues = false;
+    volatile bool finishedMappingLineQueues = false;
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
     omp_init_lock(&lineQueueLock);
@@ -48,6 +49,7 @@ void mapReduceParallel()
     for (int i = 0; i < max_threads; i++)
     {
         reducer_queue_t* newReducerQueue = new reducer_queue_t;
+        newReducerQueue->filled = false;
         omp_init_lock(&(newReducerQueue->lock));
         reducerQueues.push_back(newReducerQueue);
     }
@@ -91,7 +93,7 @@ void mapReduceParallel()
                 #pragma omp task
                 {
                     thread_id = omp_get_thread_num();
-                    mapperTask(lineQueues, wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn, &finishedPopulatingLineQueues);
+                    mapperTask(lineQueues, wordMaps[thread_id], reducerQueues, reducerThreadCount, wordHashFn, &finishedPopulatingLineQueues, &finishedMappingLineQueues);
                 }
             }
         }
@@ -105,7 +107,7 @@ void mapReduceParallel()
                 #pragma omp task
                 {
                     thread_id = omp_get_thread_num();
-                    reducerTask(reducerQueues[thread_id], reducerMaps[thread_id]);
+                    reducerTask(reducerQueues[thread_id], reducerMaps[thread_id], &finishedMappingLineQueues);
                 }
             }
         }
@@ -234,7 +236,8 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 std::vector<reducer_queue_t*> &reducerQueues,
                 unsigned int reducerCount,
                 const std::hash<std::string> &wordHashFn,
-                volatile bool* finishedPopulatingLineQueues)
+                volatile bool *finishedPopulatingLineQueues,
+                volatile bool *finishedMappingLineQueues)
 {
 
     while( (lineQueues.size() != 0) || ( (*finishedPopulatingLineQueues == false) ))
@@ -275,7 +278,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 std::map<std::string, int>::iterator it;
                 for (it = wordMap.begin(); it != wordMap.end(); it++)
                 {
-                //     std::cout << it->first << std::endl;
+                    // std::cout << it->first << std::endl;
                     // get the dest reducer id
                     reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
                     // send to reducer
@@ -289,6 +292,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
             }   
         }
     }
+    *finishedMappingLineQueues = true;
 }
 
 /**
@@ -297,25 +301,28 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
  * @param reducerQueue a pointer to the reducer queue of pairs
  * @param reducerMap a thread specific reducer map
  */
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap)
+void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile bool *finishedMappingLineQueues)
 {
     std::pair<std::string, int> pair;
     std::pair<std::map<std::string, int>::iterator, bool> ret;
     // TODO: minimize locking on reducer queue
-    omp_set_lock(&(reducerQueue->lock));
-    while (!reducerQueue->wordQueue.empty())
+    while ((reducerQueue->wordQueue.size() == 0) || (*finishedMappingLineQueues == false))
     {
-        pair = reducerQueue->wordQueue.front();
-        reducerQueue->wordQueue.pop();
-        // TODO: Evaluate a more efficient method to add to a reducer map
-        ret = reducerMap.insert(pair);
-        // if element already exists, add to the count
-        if (ret.second = false)
+        omp_set_lock(&(reducerQueue->lock));
+        if(reducerQueue->wordQueue.size() != 0)
         {
-            reducerMap[pair.first] += pair.second;
+            pair = reducerQueue->wordQueue.front();
+            reducerQueue->wordQueue.pop();
+            // TODO: Evaluate a more efficient method to add to a reducer map
+            ret = reducerMap.insert(pair);
+            // if element already exists, add to the count
+            if (ret.second = false)
+            {
+                reducerMap[pair.first] += pair.second;
+            }
         }
+        omp_unset_lock(&(reducerQueue->lock));
     }
-    omp_unset_lock(&(reducerQueue->lock));
 }
 
 /**
