@@ -18,11 +18,11 @@ omp_lock_t mapperDoneCount;
 
 
 // openmp function that runs on each proc
-void mapReduceParallel()
+void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName)
 {
 
     int maxThreads = omp_get_max_threads();
-    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files");
+    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files", 10);
     volatile bool finishedPopulatingLineQueues = false;
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
@@ -55,9 +55,6 @@ void mapReduceParallel()
     {
         reducerMaps.push_back(std::map<std::string, int>());
     }
-    int readerThreadCount = 4;
-    int mapperThreadCount = 4;
-    int reducerThreadCount = 4;
 
     std::cout << "Reader thread count " << readerThreadCount << std::endl;
     std::cout << "Mapper thread count: " << mapperThreadCount << std::endl;
@@ -107,7 +104,7 @@ void mapReduceParallel()
     }
     // create output file and lock
     std::ofstream outFile;
-    outFile.open("build/output.txt", std::ios::trunc | std::ios::out);
+    outFile.open("build/" + outputFileName, std::ios::trunc | std::ios::out);
     std::cout << "Writing to output file..." << std::endl;
     writeOutFile(reducerMaps, outFile);
     outFile.close();
@@ -135,7 +132,7 @@ bool mapReduceSerial()
     std::map<std::string, int> wordMap;
 
     auto start = std::chrono::high_resolution_clock::now();
-    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files");
+    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files", 10);
     while(!testFiles.empty())
     {
         std::queue<std::string> lineQueue;
@@ -255,6 +252,8 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 volatile int *readersDone,
                 volatile int *mappersDone)
 {
+    std::vector<std::map<std::string, int>> localMaps(reducerCount);
+
     // mapper start time
     auto start = std::chrono::high_resolution_clock::now();
     while(true)
@@ -292,28 +291,33 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                     omp_unset_lock(&(lineQueue->lock));
                     for(auto line: lineWork)
                     {
-                        populateWordMap(line, wordMap);
+                        populateWordMap(line, localMaps, wordHashFn, reducerCount);
                     }
+                }
 
-                    // map thread will put pairs onto queues for for each reducer
-                    // split words in map to other 'reducer' queues
-                    unsigned int reducerQueueId;
-                    std::map<std::string, int>::iterator it;
-                    for (it = wordMap.begin(); it != wordMap.end(); it++)
+                for(int i = 0; i < reducerCount; ++i)
+                {
+                    omp_set_lock(&(reducerQueues[i]->lock));
+                    auto queue = reducerQueues[i]->wordQueue;
+                    // std::cout << "pushing to queue i: " << i << std::endl;
+                    for(auto pair: localMaps[i])
                     {
-                        // std::cout << it->first << " " << it->second <<  std::endl;
-                        // get the dest reducer id
-                        reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
-                        // send to reducer
-                        // TODO: consider vector of pairs to reduce critical section bottleneck
-                        omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
-                        reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
-                        omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
+                        // std::cout << pair.first <<" " << pair.second << std::endl;
+                        reducerQueues[i]->wordQueue.push(std::make_pair(pair.first, pair.second));
+
                     }
-                    // clear the word map
-                    wordMap.clear();
-                }   
+                    omp_unset_lock(&(reducerQueues[i]->lock));
+
+                }
+
+                for(int i = 0; i < reducerCount; ++i)
+                {
+                    localMaps[i].clear();
+                }
             }
+
+
+
         }
     }
 
@@ -560,6 +564,36 @@ void populateWordMap(std::string &line, std::map<std::string, int> &wordMap)
             }
             if (prev < line.length())
                 wordMap[line.substr(prev, std::string::npos)]++;
+        }
+    }
+}
+
+
+void populateWordMap(std::string &line, std::vector<std::map<std::string, int>>& localMaps, const std::hash<std::string> &wordHashFn, int reducerCount)
+{
+    if (line.size() != 0)
+    {
+        std::stringstream stringStream(line);
+        while(std::getline(stringStream, line))
+        {
+            std::size_t prev = 0, pos;
+            while ((pos = line.find_first_of(" ';:,-<>.\"!?_*", prev)) != std::string::npos)
+            {
+                if (pos > prev)
+                {
+                    std::string word = line.substr(prev, pos-prev);
+                    int reducerQueueId = getReducerQueueId(word, wordHashFn, reducerCount);
+
+                    localMaps[reducerQueueId][word]++;
+                }
+                prev = pos+1;
+            }
+            if (prev < line.length())
+            {
+                std::string word = line.substr(prev, std::string::npos);
+                int reducerQueueId = getReducerQueueId(word, wordHashFn, reducerCount);
+                localMaps[reducerQueueId][word]++;
+            }
         }
     }
 }

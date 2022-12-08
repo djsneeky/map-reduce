@@ -5,6 +5,6 @@
 #include <vector>
 
 std::string getExecutablePath();
-std::vector<std::string> getListOfTestFiles(std::string dirPath);
+std::vector<std::string> getListOfTestFiles(std::string dirPath, int repeatFile);
 
 #endif //FILEHELPER_H

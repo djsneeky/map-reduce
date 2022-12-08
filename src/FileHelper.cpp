@@ -25,7 +25,7 @@ std::string getExecutablePath()
 #endif
 } 
 
-std::vector<std::string> getListOfTestFiles(std::string dirPath)
+std::vector<std::string> getListOfTestFiles(std::string dirPath, int repeatFile)
 {
     std::vector<std::string> testFiles;
 
@@ -41,8 +41,13 @@ std::vector<std::string> getListOfTestFiles(std::string dirPath)
     
     for (const auto & entry : std::filesystem::directory_iterator(absPathToFiles))
     {
-        testFiles.push_back(entry.path());
+        for(int i = 0; i < repeatFile; ++i)
+        {
+            testFiles.push_back(entry.path());
+        }
     }
+
+    std::cout << "Using " << testFiles.size() << " files" << std::endl;
 
     return testFiles;
 }

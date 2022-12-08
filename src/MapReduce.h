@@ -25,7 +25,7 @@ struct reducer_queue_t
     bool filled;
 };
 
-void mapReduceParallel();
+void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName);
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, const unsigned int maxReducers);
 void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile int *readersDone);
@@ -44,6 +44,7 @@ bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std:
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);
 void populateWordMap(std::string& line, std::map<std::string, int>& wordMap);
+void populateWordMap(std::string &line, std::vector<std::map<std::string, int>>& localMaps, const std::hash<std::string> &wordHashFn, int reducerCount);
 void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles);
 
 #endif
