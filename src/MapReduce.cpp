@@ -10,7 +10,9 @@
 #include <filesystem>
 #include <regex>
 #include <chrono>
-#include <ctime>  
+#include <ctime>
+#include <matplot/matplot.h>
+
 #include "FileHelper.h"
 
 omp_lock_t lineQueueLock;
@@ -66,6 +68,10 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
     
     auto start = std::chrono::high_resolution_clock::now();
 
+    std::vector<double> readerRunTimes;
+    std::vector<double> mapperRunTimes;
+    std::vector<double> reducerRunTimes;
+
     #pragma omp parallel
     {
         #pragma omp single
@@ -74,10 +80,11 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
             std::cout << "Creating readerTasks..." << std::endl;
             for (int i = 0; i < readerThreadCount; i++)
             {
-                #pragma omp task 
+                #pragma omp task
                 {
                     // takes a file list and populates a thread specific line queue
-                    readerTask(testFiles, lineQueues, &readersDone);
+                    double readerRunTime = readerTask(testFiles, lineQueues, &readersDone);
+                    readerRunTimes.push_back(readerRunTime);
                 }
             }
             // Mapper threads
@@ -86,8 +93,8 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
             {
                 #pragma omp task 
                 {
-                    int thread_id = omp_get_thread_num();
-                    mapperTask(lineQueues, wordMaps[i], reducerQueues, reducerThreadCount, wordHashFn, &readersDone, &mappersDone);
+                    double mapperRunTime = mapperTask(lineQueues, wordMaps[i], reducerQueues, reducerThreadCount, wordHashFn, &readersDone, &mappersDone);
+                    mapperRunTimes.push_back(mapperRunTime);
                 }
             }
             // Reducer threads
@@ -96,12 +103,13 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
             {
                 #pragma omp task
                 {
-                    int thread_id = omp_get_thread_num();
-                    reducerTask(reducerQueues[i], reducerMaps[i], &mappersDone, &reducersDone);
+                    double reducerRunTime = reducerTask(reducerQueues[i], reducerMaps[i], &mappersDone, &reducersDone);
+                    reducerRunTimes.push_back(reducerRunTime);
                 }
             }
         }
     }
+
     // create output file and lock
     std::ofstream outFile;
     outFile.open("build/" + outputFileName, std::ios::trunc | std::ios::out);
@@ -115,6 +123,12 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     std::cout << "parallel elapsed_seconds: " << elapsed_seconds.count() << std::endl;
+
+    // plots
+    std::vector<std::string> threadLabel = {"Reader Threads", "Mapper Threads", "Reducer Threads"};
+    std::vector<std::vector<double>> threadTimings = {readerRunTimes, mapperRunTimes, reducerRunTimes};
+
+    matplot::show();
 }
 
 /**
@@ -180,7 +194,7 @@ bool mapReduceSerial()
  * @param testFileList a list of file paths
  * @param lineQueue a pointer to the line queue
  */
-void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile int *readersDone)
+double readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile int *readersDone)
 {
     unsigned int filesRemaining;
     std::string testFile;
@@ -189,6 +203,8 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
 
     // reader start time
     auto start = std::chrono::high_resolution_clock::now();
+    std::chrono::time_point<std::chrono::high_resolution_clock> end;
+    std::chrono::duration<double> elapsed_seconds;
 
     while(true)
     {
@@ -218,8 +234,8 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
         if (doneFlag)
         {
             // reader end time
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> elapsed_seconds = end-start;
+            end = std::chrono::high_resolution_clock::now();
+            elapsed_seconds = end - start;
             std::cout << "Reader thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
             if (*readersDone == 0)
             {
@@ -232,25 +248,27 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
         newQueue->filled = true;
         omp_unset_lock(&(newQueue->lock));
     }
+
+    return elapsed_seconds.count();
 }
 
 /**
  * @brief Map threads read line queues and place pairs into a local word map.
  *        Then the thread will place hashed word pairs onto reducer queues.
- * 
+ *
  * @param lineQueue a pointer to the line queue
  * @param wordMap a thread specific word map
  * @param reducerQueues a reference to a list of reducer queues
  * @param reducerCount the max number of reducer threads
  * @param wordHashFn a hash function used to map words to reducer queues
  */
-void mapperTask(std::vector<line_queue_t*>& lineQueues, 
-                std::map<std::string, int> &wordMap, 
-                std::vector<reducer_queue_t*> &reducerQueues,
-                int reducerCount,
-                const std::hash<std::string> &wordHashFn,
-                volatile int *readersDone,
-                volatile int *mappersDone)
+double mapperTask(std::vector<line_queue_t *> &lineQueues,
+                  std::map<std::string, int> &wordMap,
+                  std::vector<reducer_queue_t *> &reducerQueues,
+                  int reducerCount,
+                  const std::hash<std::string> &wordHashFn,
+                  volatile int *readersDone,
+                  volatile int *mappersDone)
 {
     std::vector<std::map<std::string, int>> localMaps(reducerCount);
 
@@ -321,11 +339,13 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
         }
     }
 
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+
     #pragma omp critical
     {
         *mappersDone = *mappersDone - 1;
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end-start;
+        
         std::cout << "Mapper thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
     if (*mappersDone == 0)
@@ -333,6 +353,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
         std::cout << "Mapper threads completed" << std::endl;
     }
 
+    return elapsed_seconds.count();
 }
 
 /**
@@ -341,10 +362,10 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
  * @param reducerQueue a pointer to the reducer queue of pairs
  * @param reducerMap a thread specific reducer map
  */
-void reducerTask(reducer_queue_t* reducerQueue,
-                 std::map<std::string, int> &reducerMap, 
-                 volatile int* mappersDone,
-                 volatile int* reducersDone)
+double reducerTask(reducer_queue_t *reducerQueue,
+                   std::map<std::string, int> &reducerMap,
+                   volatile int *mappersDone,
+                   volatile int *reducersDone)
 {
     // reducer start time
     auto start = std::chrono::high_resolution_clock::now();
@@ -380,17 +401,20 @@ void reducerTask(reducer_queue_t* reducerQueue,
         }
     }
 
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+
     #pragma omp critical
     {
         *reducersDone = *reducersDone - 1;
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end-start;
         std::cout << "Reducer thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
     if (*reducersDone == 0)
     {
         std::cout << "Reducer threads completed" << std::endl;
     }
+
+    return elapsed_seconds.count();
 }
 
 /**

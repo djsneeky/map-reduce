@@ -6,13 +6,14 @@
 #include <cstdbool>
 #include <queue>
 #include <omp.h>
-
+#include <chrono>
 
 struct line_queue_t
 {
     line_queue_t()
-    : filled(false)
-    {}
+        : filled(false)
+    {
+    }
     std::vector<std::string> line;
     omp_lock_t lock;
     bool filled;
@@ -27,16 +28,16 @@ struct reducer_queue_t
 
 void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName);
 bool mapReduceSerial();
-unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, const unsigned int maxReducers);
-void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile int *readersDone);
-void mapperTask(std::vector<line_queue_t*>& lineQueues, 
-                std::map<std::string, int> &wordMap, 
-                std::vector<reducer_queue_t*> &reducerQueues,
-                int reducerCount,
-                const std::hash<std::string> &wordHashFn,
-                volatile int *readersDone,
-                volatile int *mappersDone);
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile int* mappersDone, volatile int* reducersDone);
+unsigned int getReducerQueueId(const std::string &word, const std::hash<std::string> &wordHashFn, const unsigned int maxReducers);
+double readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t *> &lineQueues, volatile int *readersDone);
+double mapperTask(std::vector<line_queue_t *> &lineQueues,
+                                         std::map<std::string, int> &wordMap,
+                                         std::vector<reducer_queue_t *> &reducerQueues,
+                                         int reducerCount,
+                                         const std::hash<std::string> &wordHashFn,
+                                         volatile int *readersDone,
+                                         volatile int *mappersDone);
+double reducerTask(reducer_queue_t *reducerQueue, std::map<std::string, int> &reducerMap, volatile int *mappersDone, volatile int *reducersDone);
 void writeOutFile(std::vector<std::map<std::string, int>> &reducerMaps, std::ofstream &output);
 void writeOutFile(std::map<std::string, int> &reducerMaps, std::ofstream &output);
 void writeOutReducersConsole(std::vector<std::map<std::string, int>> &reducerMaps);
