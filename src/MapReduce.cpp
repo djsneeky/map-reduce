@@ -67,7 +67,7 @@ void mapReduceParallel()
     volatile int readersDone = readerThreadCount;
     volatile int reducersDone = reducerThreadCount;
     
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
 
     #pragma omp parallel
     {
@@ -115,7 +115,7 @@ void mapReduceParallel()
 
     // writeOutReducersConsole(reducerMaps);
 
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     std::cout << "parallel elapsed_seconds: " << elapsed_seconds.count() << std::endl;
 }
@@ -134,7 +134,7 @@ bool mapReduceSerial()
     // read file and put lines into a queue
     std::map<std::string, int> wordMap;
 
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files");
     while(!testFiles.empty())
     {
@@ -170,7 +170,7 @@ bool mapReduceSerial()
     std::cout << "Output file written" << std::endl;
 
     // Some computation here
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
  
     std::chrono::duration<double> elapsed_seconds = end-start;
     std::cout << "serial elapsed_seconds: " << elapsed_seconds.count() << std::endl;
@@ -191,7 +191,7 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
     bool doneFlag = false;
 
     // reader start time
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
 
     while(true)
     {
@@ -221,7 +221,7 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
         if (doneFlag)
         {
             // reader end time
-            auto end = std::chrono::system_clock::now();
+            auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> elapsed_seconds = end-start;
             std::cout << "Reader thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
             if (*readersDone == 0)
@@ -256,7 +256,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 volatile int *mappersDone)
 {
     // mapper start time
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     while(true)
     {
         if((lineQueues.size() == 0) && (*readersDone != 0))
@@ -320,7 +320,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
     #pragma omp critical
     {
         *mappersDone = *mappersDone - 1;
-        auto end = std::chrono::system_clock::now();
+        auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed_seconds = end-start;
         std::cout << "Mapper thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
@@ -343,7 +343,7 @@ void reducerTask(reducer_queue_t* reducerQueue,
                  volatile int* reducersDone)
 {
     // reducer start time
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     while(true)
     {
         omp_set_lock(&(reducerQueue->lock));
@@ -379,7 +379,7 @@ void reducerTask(reducer_queue_t* reducerQueue,
     #pragma omp critical
     {
         *reducersDone = *reducersDone - 1;
-        auto end = std::chrono::system_clock::now();
+        auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed_seconds = end-start;
         std::cout << "Reducer thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
@@ -449,7 +449,7 @@ void writeOutReducersConsole(std::vector<std::map<std::string, int>> &reducerMap
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue)
 {
     std::ifstream file(fileName);
-    const int LINES_PER_BLOCK_READER = 10;
+    const int LINES_PER_BLOCK_READER = 100;
     if (file.is_open())
     {
         while(!file.eof())
