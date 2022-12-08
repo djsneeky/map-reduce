@@ -123,23 +123,7 @@ void mapReduceParallel()
     outFile.open("build/output.txt", std::ios::trunc | std::ios::out);
     // clean the file
     std::cout << "Writing to output file..." << std::endl;
-
-    // TODO: output all pairs to a file
-    #pragma omp parallel
-    {
-        int thread_id;
-        #pragma omp single
-        {
-            for (int i = 0; i < reducerThreadCount; i++)
-            {
-                #pragma omp task
-                {
-                    thread_id = omp_get_thread_num();
-                    writerTask(reducerMaps[thread_id], outFile);
-                }
-            }
-        }
-    }
+    writeOutFile(reducerMaps, outFile);
 
     outFile.close();
 }
@@ -359,16 +343,17 @@ void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &redu
 /**
  * @brief Takes a reducer map and writes it out to a file
  * 
- * @param reducerMap a reference to a reducer map
- * 
+ * @param reducerMaps a reference to a list of reducer maps
+ * @param output output file stream
  */
-void writerTask(std::map<std::string, int> &reducerMap, std::ofstream &output)
+void writeOutFile(std::vector<std::map<std::string, int>> &reducerMaps, std::ofstream &output)
 {
-    // TODO: Consider using a single queue to write to output file to reduce contention
-    for (auto it = reducerMap.begin(); it != reducerMap.end(); it++)
+    for (auto m : reducerMaps)
     {
-        #pragma omp critical
-        output << it->first << " " << it->second << std::endl;
+        for (auto it = m.begin(); it != m.end(); it++)
+        {
+            output << it->first << " " << it->second << std::endl;
+        }
     }
 }
 
