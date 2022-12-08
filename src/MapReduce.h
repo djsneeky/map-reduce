@@ -28,16 +28,17 @@ struct reducer_queue_t
 void mapReduceParallel();
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string& word, const std::hash<std::string>& wordHashFn, const unsigned int maxReducers);
-void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile bool* finishedPopulatingLineQueues);
+void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t*>& lineQueues, volatile int *readersDone);
 void mapperTask(std::vector<line_queue_t*>& lineQueues, 
                 std::map<std::string, int> &wordMap, 
                 std::vector<reducer_queue_t*> &reducerQueues,
-                unsigned int reducerCount,
+                int reducerCount,
                 const std::hash<std::string> &wordHashFn,
-                volatile bool *finishedPopulatingLineQueues,
+                volatile int *readersDone,
                 volatile int *mappersDone);
 void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile int *mappersDone);
 void writeOutFile(std::vector<std::map<std::string, int>> &reducerMaps, std::ofstream &output);
+void writeOutFile(std::map<std::string, int> &reducerMaps, std::ofstream &output);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);

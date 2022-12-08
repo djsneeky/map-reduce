@@ -6,7 +6,7 @@ int main() {
     // master process keeps list of files
 
     // master process still performs map reduce
-    // mapReduceSerial();
+    mapReduceSerial();
     mapReduceParallel();
 
     // master process is notified when all processors have finished
