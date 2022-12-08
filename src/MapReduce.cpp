@@ -22,7 +22,7 @@ void mapReduceParallel()
 {
 
     int maxThreads = omp_get_max_threads();
-    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files2");
+    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files");
     volatile bool finishedPopulatingLineQueues = false;
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
@@ -113,7 +113,7 @@ void mapReduceParallel()
     outFile.close();
     std::cout << "Output file written" << std::endl;
 
-    writeOutReducersConsole(reducerMaps);
+    // writeOutReducersConsole(reducerMaps);
 
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
