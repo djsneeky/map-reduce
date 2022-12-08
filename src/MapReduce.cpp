@@ -55,9 +55,9 @@ void mapReduceParallel()
     {
         reducerMaps.push_back(std::map<std::string, int>());
     }
-    int readerThreadCount = omp_get_max_threads();
-    int mapperThreadCount = omp_get_max_threads();
-    int reducerThreadCount = omp_get_max_threads();
+    int readerThreadCount = 4;
+    int mapperThreadCount = 4;
+    int reducerThreadCount = 4;
 
     std::cout << "Reader thread count " << readerThreadCount << std::endl;
     std::cout << "Mapper thread count: " << mapperThreadCount << std::endl;
@@ -190,6 +190,9 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
     line_queue_t* newQueue = nullptr;
     bool doneFlag = false;
 
+    // reader start time
+    auto start = std::chrono::system_clock::now();
+
     while(true)
     {
         // std::cout << "reader" << std::endl;
@@ -217,9 +220,13 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
         }
         if (doneFlag)
         {
+            // reader end time
+            auto end = std::chrono::system_clock::now();
+            std::chrono::duration<double> elapsed_seconds = end-start;
+            std::cout << "Reader thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
             if (*readersDone == 0)
             {
-                std::cout << "readerTasks completed" << std::endl;
+                std::cout << "Reader threads completed" << std::endl;
             }
             break;
         }
@@ -248,7 +255,8 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 volatile int *readersDone,
                 volatile int *mappersDone)
 {
-
+    // mapper start time
+    auto start = std::chrono::system_clock::now();
     while(true)
     {
         if((lineQueues.size() == 0) && (*readersDone != 0))
@@ -312,10 +320,13 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
     #pragma omp critical
     {
         *mappersDone = *mappersDone - 1;
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+        std::cout << "Mapper thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
     if (*mappersDone == 0)
     {
-        std::cout << "mapperTasks completed" << std::endl;
+        std::cout << "Mapper threads completed" << std::endl;
     }
 
 }
@@ -331,6 +342,8 @@ void reducerTask(reducer_queue_t* reducerQueue,
                  volatile int* mappersDone,
                  volatile int* reducersDone)
 {
+    // reducer start time
+    auto start = std::chrono::system_clock::now();
     while(true)
     {
         omp_set_lock(&(reducerQueue->lock));
@@ -366,10 +379,13 @@ void reducerTask(reducer_queue_t* reducerQueue,
     #pragma omp critical
     {
         *reducersDone = *reducersDone - 1;
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+        std::cout << "Reducer thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed_seconds.count() << std::endl;
     }
     if (*reducersDone == 0)
     {
-        std::cout << "reducerTasks completed" << std::endl;
+        std::cout << "Reducer threads completed" << std::endl;
     }
 }
 
