@@ -30,7 +30,7 @@ std::vector<std::string> getListOfTestFiles()
     std::vector<std::string> testFiles;
 
     std::string directoryOfexe = std::filesystem::path{ getExecutablePath() }.parent_path().string();
-    const std::string pathToTestFile = "/../../test/files";
+    const std::string pathToTestFile = "/../../test/files2";
     std::string absPathToFiles = directoryOfexe + pathToTestFile;
 
     std::cout << "Using " << absPathToFiles << " as root testing directory" << std::endl;
