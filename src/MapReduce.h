@@ -39,6 +39,7 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
 void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile int* mappersDone, volatile int* reducersDone);
 void writeOutFile(std::vector<std::map<std::string, int>> &reducerMaps, std::ofstream &output);
 void writeOutFile(std::map<std::string, int> &reducerMaps, std::ofstream &output);
+void writeOutReducersConsole(std::vector<std::map<std::string, int>> &reducerMaps);
 bool populateLineQueues(const std::string &fileName, std::vector<std::queue<std::string>> &lineQueues);
 bool populateLineQueue(const std::string& fileName, std::queue<std::string>& lineQueue);
 bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);

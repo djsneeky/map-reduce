@@ -93,8 +93,6 @@ void mapReduceParallel()
                     mapperTask(lineQueues, wordMaps[i], reducerQueues, reducerThreadCount, wordHashFn, &readersDone, &mappersDone);
                 }
             }
-
-
             // Reducer threads
             std::cout << "Creating reducerTasks..." << std::endl;
             for (int i = 0; i < reducerThreadCount; i++)
@@ -114,6 +112,8 @@ void mapReduceParallel()
     writeOutFile(reducerMaps, outFile);
     outFile.close();
     std::cout << "Output file written" << std::endl;
+
+    writeOutReducersConsole(reducerMaps);
 
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
@@ -371,20 +371,6 @@ void reducerTask(reducer_queue_t* reducerQueue,
     {
         std::cout << "reducerTasks completed" << std::endl;
     }
-
-    // #pragma omp critical
-    // {
-    //     if(reducerMap.size())
-    //     {
-    //         // std::cout << "id: " << omp_get_thread_num() << std::endl;
-    //         for(auto item: reducerMap)
-    //         {
-    //             std::cout << item.first << " " << item.second << std::endl;
-    //         }
-    //         // std::cout << std::endl;
-    //     }
-    // }
-
 }
 
 /**
@@ -404,12 +390,34 @@ void writeOutFile(std::vector<std::map<std::string, int>> &reducerMaps, std::ofs
     }
 }
 
+/**
+ * @brief Write out a single reducer map to the console
+ * 
+ * @param reducerMaps a reference to a reducer map
+ * @param output a reference to the output file stream object
+ */
 void writeOutFile(std::map<std::string, int> &reducerMaps, std::ofstream &output)
 {
-
     for (auto it = reducerMaps.begin(); it != reducerMaps.end(); it++)
     {
         output << it->first << " " << it->second << std::endl;
+    }
+}
+
+/**
+ * @brief Takes all reducer maps and writes them out to the console
+ * 
+ * @param reducerMaps a reference to a list of reducer maps
+ * @param output output file stream
+ */
+void writeOutReducersConsole(std::vector<std::map<std::string, int>> &reducerMaps)
+{
+    for (auto m : reducerMaps)
+    {
+        for (auto it = m.begin(); it != m.end(); it++)
+        {
+            std::cout << it->first << " " << it->second << std::endl;
+        }
     }
 }
 
