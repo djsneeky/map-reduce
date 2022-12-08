@@ -22,13 +22,12 @@ void mapReduceParallel()
 {
 
     int maxThreads = omp_get_max_threads();
-    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files");
+    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files2");
     volatile bool finishedPopulatingLineQueues = false;
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
     omp_init_lock(&lineQueueLock);
     omp_init_lock(&mapperDoneCount);
-
 
     // word maps - one for each mapper thread
     std::vector<std::map<std::string, int>> wordMaps;
@@ -60,72 +59,63 @@ void mapReduceParallel()
     int mapperThreadCount = omp_get_max_threads();
     int reducerThreadCount = omp_get_max_threads();
 
+    std::cout << "Reader thread count " << readerThreadCount << std::endl;
+    std::cout << "Mapper thread count: " << mapperThreadCount << std::endl;
+    std::cout << "Reducer thread count: " << reducerThreadCount << std::endl;
+
     volatile int mappersDone = mapperThreadCount;
     volatile int readersDone = readerThreadCount;
-
-    std::cout << "mappersDone " << mappersDone << std::endl;
-    std::cout << "readersDone " << readersDone << std::endl;
+    volatile int reducersDone = reducerThreadCount;
+    
     auto start = std::chrono::system_clock::now();
 
-#pragma omp parallel
-{
-    #pragma omp single
+    #pragma omp parallel
     {
-        std::cout << " readerTask" << std::endl;
-        for (int i = 0; i < readerThreadCount; i++)
+        #pragma omp single
         {
-            #pragma omp task 
+            // Reader threads
+            std::cout << "Creating readerTasks..." << std::endl;
+            for (int i = 0; i < readerThreadCount; i++)
             {
-                // takes a file list and populates a thread specific line queue
-                readerTask(testFiles, lineQueues, &readersDone);
+                #pragma omp task 
+                {
+                    // takes a file list and populates a thread specific line queue
+                    readerTask(testFiles, lineQueues, &readersDone);
+                }
             }
-        }
-
-   
-
-    // Mapper threads
-
-    // #pragma omp single
-    // {
-        std::cout << " mapperTask" << std::endl;
-        for (int i = 0; i < mapperThreadCount; i++)
-        {
-            #pragma omp task 
+            // Mapper threads
+            std::cout << "Creating mapperTasks..." << std::endl;
+            for (int i = 0; i < mapperThreadCount; i++)
             {
-                int thread_id = omp_get_thread_num();
-                mapperTask(lineQueues, wordMaps[i], reducerQueues, reducerThreadCount, wordHashFn, &readersDone, &mappersDone);
+                #pragma omp task 
+                {
+                    int thread_id = omp_get_thread_num();
+                    mapperTask(lineQueues, wordMaps[i], reducerQueues, reducerThreadCount, wordHashFn, &readersDone, &mappersDone);
+                }
             }
-        }
-    // }
 
 
-    // Reducer threads
-    // reducer thread receives pair from queue and updates its map
-    // #pragma omp single
-    // {
-        std::cout << " reducerTask" << std::endl;
-        for (int i = 0; i < reducerThreadCount; i++)
-        {
-            #pragma omp task
+            // Reducer threads
+            std::cout << "Creating reducerTasks..." << std::endl;
+            for (int i = 0; i < reducerThreadCount; i++)
             {
-                int thread_id = omp_get_thread_num();
-                reducerTask(reducerQueues[i], reducerMaps[i], &mappersDone);
+                #pragma omp task
+                {
+                    int thread_id = omp_get_thread_num();
+                    reducerTask(reducerQueues[i], reducerMaps[i], &mappersDone, &reducersDone);
+                }
             }
         }
     }
-
-}
     // create output file and lock
     std::ofstream outFile;
     outFile.open("build/output.txt", std::ios::trunc | std::ios::out);
-    // clean the file
     std::cout << "Writing to output file..." << std::endl;
     writeOutFile(reducerMaps, outFile);
-
     outFile.close();
+    std::cout << "Output file written" << std::endl;
 
     auto end = std::chrono::system_clock::now();
- 
     std::chrono::duration<double> elapsed_seconds = end-start;
     std::cout << "parallel elapsed_seconds: " << elapsed_seconds.count() << std::endl;
 }
@@ -176,8 +166,8 @@ bool mapReduceSerial()
     // clean the file
     std::cout << "Writing to output file..." << std::endl;
     writeOutFile(wordMap, outFile);
-
     outFile.close();
+    std::cout << "Output file written" << std::endl;
 
     // Some computation here
     auto end = std::chrono::system_clock::now();
@@ -198,49 +188,21 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
     unsigned int filesRemaining;
     std::string testFile;
     line_queue_t* newQueue = nullptr;
-    #pragma omp critical
-    filesRemaining = testFileList.size();
-
-    // while (filesRemaining != 0)
-    // {
-    //     #pragma omp critical
-    //     {
-    //         filesRemaining = testFileList.size();
-    //         if(filesRemaining != 0)
-    //         {
-    //             testFile = testFileList.back();
-    //             testFileList.pop_back();
-    //             newQueue = new line_queue_t;
-    //             omp_init_lock(&(newQueue->lock));
-    //             newQueue->filled = false;
-
-    //             omp_set_lock(&lineQueueLock);
-    //             lineQueues.push_back(newQueue);
-    //             omp_unset_lock(&lineQueueLock);
-    //         }
-
-    //     }
-    //     populateLineQueue(testFile, newQueue);
-    //     testFile = "";
-    //     if(newQueue)
-    //     {
-    //         omp_set_lock(&(newQueue->lock));
-    //         newQueue->filled = true;
-    //         omp_unset_lock(&(newQueue->lock));
-
-    //     }
-    // }
+    bool doneFlag = false;
 
     while(true)
     {
         // std::cout << "reader" << std::endl;
-
-       #pragma omp critical
+        #pragma omp critical
         {
-            // int tid = omp_get_thread_num();
-            // std::cout << "tid: " << tid << std::endl;
             filesRemaining = testFileList.size();
-            if(filesRemaining != 0)
+            if(filesRemaining == 0)
+            {
+                // std::cout << "readersDone: " << *readersDone << std::endl;
+                *readersDone = *readersDone - 1;
+                doneFlag = true;
+            }
+            else
             {
                 testFile = testFileList.back();
                 testFileList.pop_back();
@@ -252,33 +214,20 @@ void readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t
                 lineQueues.push_back(newQueue);
                 omp_unset_lock(&lineQueueLock);
             }
-
         }
-        // std::cout << "filesRemaining: " << filesRemaining << std::endl;
-        if(filesRemaining == 0)
+        if (doneFlag)
         {
-            #pragma omp critical
+            if (*readersDone == 0)
             {
-                        // std::cout << "readersDone: " << *readersDone << std::endl;
-
-                *readersDone = *readersDone - 1;
-                        // std::cout << "readersDone: " << *readersDone << std::endl;
-
-            } 
+                std::cout << "readerTasks completed" << std::endl;
+            }
             break;
         }
-        else
-        {
-            populateLineQueue(testFile, newQueue);
-            omp_set_lock(&(newQueue->lock));
-            newQueue->filled = true;
-            omp_unset_lock(&(newQueue->lock));
-        }
+        populateLineQueue(testFile, newQueue);
+        omp_set_lock(&(newQueue->lock));
+        newQueue->filled = true;
+        omp_unset_lock(&(newQueue->lock));
     }
-
-
-
-
 }
 
 /**
@@ -314,7 +263,6 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
         {
             line_queue_t* lineQueue = nullptr;
             omp_set_lock(&lineQueueLock);
-
             if(lineQueues.size() != 0)
             {
                 lineQueue = lineQueues.back();
@@ -359,72 +307,16 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 }   
             }
         }
-
     }
 
-
-
-
-
-    // while( (lineQueues.size() != 0) || ( (*readersDone != 0) ))
-    // {
-    //     // std::cout << "mapper" << std::endl;
-    //     // std::cout << "readersDone: " << *readersDone << std::endl;
-    //     line_queue_t* lineQueue = nullptr;
-    //     omp_set_lock(&lineQueueLock);
-
-    //     if(lineQueues.size() != 0)
-    //     {
-    //         lineQueue = lineQueues.back();
-    //         lineQueues.pop_back();
-    //     }
-        
-    //     omp_unset_lock(&lineQueueLock);
-
-    //     if(lineQueue)
-    //     {
-    //         while (!lineQueue->filled || (lineQueue->line.size() != 0) )
-    //         {
-    //             std::vector<std::string> lineWork;
-    //             omp_set_lock(&(lineQueue->lock));
-    //             while(lineQueue->line.size() != 0)
-    //             {
-    //                 lineWork.push_back(lineQueue->line.back());
-    //                 lineQueue->line.pop_back();
-    //             }
-    //             omp_unset_lock(&(lineQueue->lock));
-    //             for(auto line: lineWork)
-    //             {
-    //                 populateWordMap(line, wordMap);
-    //             }
-
-    //             // map thread will put pairs onto queues for for each reducer
-    //             // split words in map to other 'reducer' queues
-    //             unsigned int reducerQueueId;
-    //             std::map<std::string, int>::iterator it;
-    //             for (it = wordMap.begin(); it != wordMap.end(); it++)
-    //             {
-    //                 // std::cout << it->first << " " << it->second <<  std::endl;
-    //                 // get the dest reducer id
-    //                 reducerQueueId = getReducerQueueId(it->first, wordHashFn, reducerCount);
-    //                 // send to reducer
-    //                 // TODO: consider vector of pairs to reduce critical section bottleneck
-    //                 omp_set_lock(&(reducerQueues[reducerQueueId]->lock));
-    //                 reducerQueues[reducerQueueId]->wordQueue.push(std::make_pair(it->first, it->second));
-    //                 omp_unset_lock(&(reducerQueues[reducerQueueId]->lock));
-    //             }
-    //             // clear the word map
-    //             wordMap.clear();
-    //         }   
-    //     }
-    // }
-
-    // omp_set_lock(&mapperDoneCount);
     #pragma omp critical
     {
         *mappersDone = *mappersDone - 1;
     }
-    // omp_unset_lock(&mapperDoneCount);
+    if (*mappersDone == 0)
+    {
+        std::cout << "mapperTasks completed" << std::endl;
+    }
 
 }
 
@@ -434,67 +326,50 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
  * @param reducerQueue a pointer to the reducer queue of pairs
  * @param reducerMap a thread specific reducer map
  */
-void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &reducerMap, volatile int *mappersDone)
+void reducerTask(reducer_queue_t* reducerQueue,
+                 std::map<std::string, int> &reducerMap, 
+                 volatile int* mappersDone,
+                 volatile int* reducersDone)
 {
-    std::pair<std::string, int> pair;
-    std::pair<std::map<std::string, int>::iterator, bool> ret;
-    // TODO: minimize locking on reducer queue
-
     while(true)
     {
-        // std::cout << "mappersDone: " << *mappersDone << std::endl;
-
-        // if((reducerQueue->wordQueue.size() == 0) && *mappersDone != 0 )
-        // {
-        //     #pragma omp taskyield
-        // }
-        // else if((reducerQueue->wordQueue.size() == 0) && *mappersDone == 0  )
-        // {
-        //     // std::cout << "bye" << std::endl;
-        //     break;
-        // }
-        // else
-        // {
-        //     omp_set_lock(&(reducerQueue->lock));
-        //     if(reducerQueue->wordQueue.size() != 0)
-        //     {
-        //         pair = reducerQueue->wordQueue.front();
-        //         reducerQueue->wordQueue.pop();
-        //         // TODO: Evaluate a more efficient method to add to a reducer map
-        //         // std::cout << pair.first << " "<< pair.second <<  std::endl;
-        //         ret = reducerMap.insert(pair);
-        //         // if element already exists, add to the count
-        //         if (ret.second == false)
-        //         {
-        //             reducerMap[pair.first] += pair.second;
-        //         }
-        //     }
-        //     omp_unset_lock(&(reducerQueue->lock));
-        // }
-
         omp_set_lock(&(reducerQueue->lock));
-        if((reducerQueue->wordQueue.size() != 0))
+        if ((reducerQueue->wordQueue.size() == 0) && *mappersDone != 0)
         {
-            pair = reducerQueue->wordQueue.front();
-            reducerQueue->wordQueue.pop();
-            // TODO: Evaluate a more efficient method to add to a reducer map
-            // std::cout << pair.first << " "<< pair.second <<  std::endl;
-            ret = reducerMap.insert(pair);
-            // if element already exists, add to the count
-            if (ret.second == false)
-            {
-                reducerMap[pair.first] += pair.second;
-            }
+            omp_unset_lock(&(reducerQueue->lock));
+            #pragma omp taskyield
         }
-
-        if((reducerQueue->wordQueue.size() == 0) && *mappersDone == 0  ) 
+        else if ((reducerQueue->wordQueue.size() == 0) && *mappersDone == 0 )
         {
             omp_unset_lock(&(reducerQueue->lock));
             break;
         }
-        omp_unset_lock(&(reducerQueue->lock));
+        else
+        {
+            if (reducerQueue->wordQueue.size() != 0)
+            {
+                auto pair = reducerQueue->wordQueue.front();
+                reducerQueue->wordQueue.pop();
+                // TODO: Evaluate a more efficient method to add to a reducer map
+                // std::cout << pair.first << " "<< pair.second <<  std::endl;
+                omp_unset_lock(&(reducerQueue->lock));
+                auto ret = reducerMap.insert(pair);
+                // if element already exists, add to the count
+                if (ret.second == false)
+                {
+                    reducerMap[pair.first] += pair.second;
+                }
+            }
+        }
+    }
 
-
+    #pragma omp critical
+    {
+        *reducersDone = *reducersDone - 1;
+    }
+    if (*reducersDone == 0)
+    {
+        std::cout << "reducerTasks completed" << std::endl;
     }
 
     // #pragma omp critical
@@ -507,9 +382,7 @@ void reducerTask(reducer_queue_t* reducerQueue, std::map<std::string, int> &redu
     //             std::cout << item.first << " " << item.second << std::endl;
     //         }
     //         // std::cout << std::endl;
-
     //     }
-
     // }
 
 }
