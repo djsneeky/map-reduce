@@ -25,12 +25,16 @@ std::string getExecutablePath()
 #endif
 } 
 
-std::vector<std::string> getListOfTestFiles()
+std::vector<std::string> getListOfTestFiles(std::string dirPath)
 {
     std::vector<std::string> testFiles;
 
     std::string directoryOfexe = std::filesystem::path{ getExecutablePath() }.parent_path().string();
-    const std::string pathToTestFile = "/../../test/files2";
+    const std::string pathToTestFile = dirPath;
+    if (pathToTestFile.empty())
+    {
+        return testFiles;
+    }
     std::string absPathToFiles = directoryOfexe + pathToTestFile;
 
     std::cout << "Using " << absPathToFiles << " as root testing directory" << std::endl;

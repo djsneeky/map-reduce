@@ -21,7 +21,7 @@ void mapReduceParallel()
 {
 
     int max_threads = omp_get_max_threads();
-    std::vector<std::string> testFiles = getListOfTestFiles();
+    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files2");
     volatile bool finishedPopulatingLineQueues = false;
     // queues for lines - one for each mapper thread
     std::vector<line_queue_t*> lineQueues;
