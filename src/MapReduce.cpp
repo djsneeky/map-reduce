@@ -96,8 +96,7 @@ void mapReduceParallel()
             }
         }
 
-        // // Reducer threads
-
+        // Reducer threads
         #pragma omp single nowait
         {
             // reducer thread receives pair from queue and updates its map
@@ -174,7 +173,7 @@ bool mapReduceSerial()
 
     return true;
 }
-volatile bool atleastOnce  = false;
+
 /**
  * @brief Takes a file list and populates a thread's line queue
  * 
@@ -287,7 +286,6 @@ void mapperTask(std::vector<line_queue_t*>& lineQueues,
                 }
                 // clear the word map
                 wordMap.clear();
-
             }   
         }
     }
