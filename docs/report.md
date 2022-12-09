@@ -3,10 +3,9 @@
 - [Map Reduce Report](#map-reduce-report)
   - [Introduction](#introduction)
   - [Single Node](#single-node)
-    - [Implementation](#implementation)
-      - [Reader Threads](#reader-threads)
-      - [Mapper Threads](#mapper-threads)
-      - [Reducer Threads](#reducer-threads)
+    - [Reader Threads](#reader-threads)
+    - [Mapper Threads](#mapper-threads)
+    - [Reducer Threads](#reducer-threads)
     - [Performance](#performance)
   - [Multi-Node](#multi-node)
     - [Performance](#performance-1)
@@ -26,9 +25,7 @@ As laid out from the project description, we had the following  core items:
 
 ## Single Node
 
-### Implementation
-
-#### Reader Threads
+### Reader Threads
 
 Each reader thread has access to:
 
@@ -37,7 +34,7 @@ Each reader thread has access to:
 
 The list of files is thread safe for each queue. A lock is used for each line queue, to prevent race conditions between the reader threads and mapper threads for lines.
 
-#### Mapper Threads
+### Mapper Threads
 
 Each mapper thread has access to:
 
@@ -50,7 +47,7 @@ The mapper thread reads lines from the line queue and inserts words and counts t
 
 The mapper thread also creates a combined record of word counts by hashing the word to value between 0 and the number of reducer queues. This value is used as an index for selecting the queue in which the word and count pair should be placed.
 
-#### Reducer Threads
+### Reducer Threads
 
 Each reducer thread has access to:
 
@@ -61,13 +58,31 @@ The reducer threads read items from their thread's queue and combine them to a s
 
 ### Performance
 
-TODO: Speedup, efficiency, and Karp-Flatt analysis on 2,4,8,16 processors
+The speedup formula is as follows:
 
-| Thread count      | 1   | 2   | 4   | 8   | 16  |
-| ----------------- | --- | --- | --- | --- | --- |
-| Speedup           |     |     |     |     |     |
-| Efficiency        |     |     |     |     |     |
-| Karp-Flatt Metric |     |     |     |     |     |
+$$ S = { T_1 \over T_p } $$
+
+where $T_1$ is the execution time for one core and $T_p$ is execution time for $p$ cores.
+
+The efficiency formula is as follows:
+
+$$ E = { T_1 \over p * T_p } $$
+
+where $T_1$ is the execution time for one core, p is the number of cores, and $T_p$ is execution time for $p$ cores.
+
+The Karp-Flatt Metric is as follows:
+
+$$ e = { { {1 \over S} - {1 \over p} } \over { 1 - { 1 \over p } } } $$
+
+where $S$ is speedup and $p$ is number of cores.
+
+The resulting table below is from processing the provided files.
+
+| Thread/Core count | 1   | 2    | 4    | 8    | 16   |
+| ----------------- | --- | ---- | ---- | ---- | ---- |
+| Speedup           | 1   | 1.78 | 2.78 | 3.11 | 3.60 |
+| Efficiency        | 1   | 0.89 | 0.70 | 0.39 | 0.22 |
+| Karp-Flatt Metric | N/A | 0.12 | 0.15 | 0.22 | 0.23 |
 
 TODO: Graphs showing number of readers, mappers, and reducers and performance
 
