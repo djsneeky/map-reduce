@@ -970,7 +970,7 @@ void mpiCommThread(std::vector<std::string>& testFileList,  std::vector<std::str
             {
                 if(noMoreFilesSentToAllNodes())
                 {
-                    // std::cout << "leaving comm rank: " << rank << std::endl;
+                    std::cout << "leaving comm rank: " << rank << std::endl;
                     break;
                 }
                 else
@@ -981,7 +981,7 @@ void mpiCommThread(std::vector<std::string>& testFileList,  std::vector<std::str
             }
             else
             {
-                // std::cout << "leaving comm rank: " << rank << std::endl;
+                std::cout << "leaving comm rank: " << rank << std::endl;
                 break;
             }
         }
@@ -1126,7 +1126,7 @@ void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int redu
             {
                 mpiCommThread(testFiles, localFiles,reducerQueues) ;
             }
-            std::cout << "Creating readerTasks..." << std::endl;
+            // std::cout << "Creating readerTasks..." << std::endl;
             for (int i = 0; i < readerThreadCount; i++)
             {
                 #pragma omp task
@@ -1140,7 +1140,7 @@ void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int redu
                 }
             }
 
-            std::cout << "Creating mapperTasks..." << std::endl;
+            // std::cout << "Creating mapperTasks..." << std::endl;
             for (int i = 0; i < mapperThreadCount; i++)
             {
                 #pragma omp task 
@@ -1153,7 +1153,7 @@ void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int redu
                 }
             }
 
-            std::cout << "Creating reducerTasks..." << std::endl;
+            // std::cout << "Creating reducerTasks..." << std::endl;
             for (int i = 0; i < reducerThreadCount; i++)
             {
                 #pragma omp task
@@ -1209,7 +1209,7 @@ double readerTaskMpi(std::vector<std::string> &testFileList, std::vector<line_qu
             // std::cout << "Reader thread " << omp_get_thread_num() << " elapsed_seconds: " << elapsed << std::endl;
             if (*readersDone == 0)
             {
-                // std::cout << "Reader threads completed rank: " <<rank << std::endl;
+                std::cout << "Reader threads completed rank: " <<rank << std::endl;
             }
 
             break;
@@ -1371,7 +1371,7 @@ double mapperTaskMpi(std::vector<line_queue_t *> &lineQueues,
     }
     if (*mappersDone == 0)
     {
-        // std::cout << "Mapper threads completed rank: " << rank << std::endl;
+        std::cout << "Mapper threads completed rank: " << rank << std::endl;
 
         if(rank != 0)
         {
@@ -1454,7 +1454,7 @@ double reducerTaskMpi(reducer_queue_t *reducerQueue,
     }
     if (*reducersDone == 0)
     {
-        // std::cout << "Reducer threads completed rank: " << rank << std::endl;
+        std::cout << "Reducer threads completed rank: " << rank << std::endl;
     }
 
     return elapsed;
