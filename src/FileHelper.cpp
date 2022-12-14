@@ -63,7 +63,7 @@ std::vector<std::string> getListOfTestFiles(std::string dirPath, int repeatFile)
         {
             for(int i = 0; i < repeatFile; ++i)
             {
-                // std::cout << "../test/files/"+ std::string(en->d_name) << std::endl;
+                std::cout << dirPath+ std::string(en->d_name) << std::endl;
                 testFiles.push_back(dirPath+ std::string(en->d_name));
             }
         }
