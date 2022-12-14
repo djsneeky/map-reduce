@@ -14,6 +14,12 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(${BINARY} PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
+find_package(MPI REQUIRED)
+message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
+target_link_libraries(${SRC_LIB} PUBLIC MPI::MPI_CXX)
+target_link_libraries(${BINARY}  PUBLIC MPI::MPI_CXX)
+
+
 # Add plot lib
 include(FetchContent)
 FetchContent_Declare(matplotplusplus

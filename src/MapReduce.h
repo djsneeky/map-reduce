@@ -8,6 +8,8 @@
 #include <omp.h>
 #include <chrono>
 
+static const int MAX_NODES = 16;
+
 struct line_queue_t
 {
     line_queue_t()
@@ -26,7 +28,47 @@ struct reducer_queue_t
     bool filled;
 };
 
-void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName);
+
+enum MessageType
+{
+    REQUEST_NEW_FILE = 0,
+    NEW_FILE = 1, //geting lazy
+    NO_MORE_FILES = 2,
+    REDUCER_QUEUE = 3,
+    MAPPER_DONE = 4,
+    ALL_MAPPERS_DONE = 5
+};
+
+
+struct MessageHeader
+{
+    MessageType messageId;
+    int source;
+    int pack(char* buffer);
+    int unpack(char* buffer);
+    const int getSize();
+};
+
+struct SendBufferEntry
+{
+    char* buffer;
+    int size;
+    int dest;
+};
+struct mpiState
+{
+    bool outOfFiles;
+    bool messageSent;
+    volatile bool allMappersDone;
+    bool outOfFileSentMasterList[MAX_NODES];
+    bool mappersDoneReceivedList[MAX_NODES];
+    int outOfFileSentMaster;
+    int mappersDoneReceived;
+    bool masterMapperDone;
+};
+
+
+void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName, int repeatFiles);
 bool mapReduceSerial();
 unsigned int getReducerQueueId(const std::string &word, const std::hash<std::string> &wordHashFn, const unsigned int maxReducers);
 double readerTask(std::vector<std::string> &testFileList, std::vector<line_queue_t *> &lineQueues, volatile int *readersDone);
@@ -47,5 +89,42 @@ bool populateLineQueue(const std::string &fileName, line_queue_t* lineQueue);
 void populateWordMap(std::string& line, std::map<std::string, int>& wordMap);
 void populateWordMap(std::string &line, std::vector<std::map<std::string, int>>& localMaps, const std::hash<std::string> &wordHashFn, int reducerCount);
 void addTestFiles(const std::string &dirPath, std::queue<std::string> &testFiles);
+
+// MPI
+void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int reducerThreadCount, std::string outputFileName, int repeatFiles);
+
+double readerTaskMpi(std::vector<std::string> &testFileList, std::vector<line_queue_t *> &lineQueues, volatile int *readersDone);
+
+double mapperTaskMpi(std::vector<line_queue_t *> &lineQueues,
+                  std::vector<reducer_queue_t *> &reducerQueues,
+                  int reducerCount,
+                  const std::hash<std::string> &wordHashFn,
+                  volatile int *readersDone,
+                  volatile int *mappersDone);
+
+double reducerTaskMpi(reducer_queue_t *reducerQueue,
+                    std::map<std::string, int> &reducerMap,
+                    volatile bool *mappersDone,
+                    volatile int *reducersDone);
+
+void populateWordMapMpi(std::string &line,
+                        std::vector<std::vector<std::map<std::string, int>>>& localMaps,
+                        const std::hash<std::string> &wordHashFn,
+                        int reducerCount);
+
+
+int getMapSize(std::map<std::string,int>& map);
+void serializeMap(char* buffer, std::map<std::string,int>& map);
+void unserializeMap(char* buffer, int bufferLength, std::map<std::string,int>& map);
+
+
+
+bool noMoreFilesSentToAllNodes();
+
+bool allMappersDone();
+
+void sendAllMappersDone();
+
+void sendNoMoreFilesToNodes();
 
 #endif

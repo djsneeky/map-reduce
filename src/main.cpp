@@ -1,12 +1,17 @@
 #include <iostream>
 
 #include "MapReduce.h"
+#include <fstream>
+#include <sstream>
+#include <mpi.h>
 
-int main() {
+int main(int argc, char *argv[]) {
     // master process keeps list of files
 
     // master process still performs map reduce
     // "serial" run
+    MPI_Init(&argc,&argv);
+
 
     std::vector<int> numberOfThreads;
     numberOfThreads.push_back(1);
@@ -15,19 +20,32 @@ int main() {
     numberOfThreads.push_back(8);
     numberOfThreads.push_back(16);
 
-    for(auto item: numberOfThreads)
-    {
-        mapReduceParallel(item,item,item, "parallel" + std::to_string(item) + ".txt");
-    }
+    std::vector<int> numberOfRepeatFiles;
+    numberOfRepeatFiles.push_back(1);
+    numberOfRepeatFiles.push_back(5);
+    numberOfRepeatFiles.push_back(10);
+    numberOfRepeatFiles.push_back(15);
+    numberOfRepeatFiles.push_back(20);
 
-    // mapReduceParallel(1,1,1, "serial.txt");
-    // mapReduceParallel(2,2,2, "parallel2.txt");
-    // mapReduceParallel(4,4,4, "parallel4.txt");
-    // mapReduceParallel(8,8,8, "parallel2.txt");
-    // mapReduceParallel(16,16,16, "parallel16.txt");
+    std::ofstream ofs;
+    ofs.open("build/results.txt", std::ofstream::out | std::ofstream::trunc);
+    ofs.close();
+
+    // for(auto repeat: numberOfRepeatFiles)
+    // {
+    //     for(auto item: numberOfThreads)
+    //     {
+    //         mapReduceParallel(item,item,item, "parallel" + std::to_string(item) + ".txt", repeat);
+    //     }
+    // }
+
+    mapReduceMPIParallel(2,2,2,"memes.txt", 5);
+    // mapReduceMPIParallel(1,1,1,"memes.txt", 5);
+
 
 
     // master process is notified when all processors have finished
+    MPI_Finalize();
 
     return 0;
 }
