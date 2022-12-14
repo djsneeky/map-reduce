@@ -55,7 +55,7 @@ std::vector<std::string> getListOfTestFiles(std::string dirPath, int repeatFile)
 
    DIR *dr;
    struct dirent *en;
-   dr = opendir("../test/files/"); //open all directory
+   dr = opendir(dirPath.c_str()); //open all directory
    if (dr) {
       while ((en = readdir(dr)) != NULL) {
         std::string fileName(en->d_name);
@@ -63,8 +63,8 @@ std::vector<std::string> getListOfTestFiles(std::string dirPath, int repeatFile)
         {
             for(int i = 0; i < repeatFile; ++i)
             {
-                std::cout << "../test/files/"+ std::string(en->d_name) << std::endl;
-                testFiles.push_back("../test/files/"+ std::string(en->d_name));
+                // std::cout << "../test/files/"+ std::string(en->d_name) << std::endl;
+                testFiles.push_back(dirPath+ std::string(en->d_name));
             }
         }
 

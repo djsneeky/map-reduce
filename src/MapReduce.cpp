@@ -14,6 +14,7 @@
 #include <numeric>
 // #include <matplot/matplot.h>
 #include <mpi.h>
+#include <cstring>
 
 #include "FileHelper.h"
 
@@ -44,7 +45,7 @@ void mapReduceParallel(int readerThreadCount, int mapperThreadCount, int reducer
     }
 
     // hash function for <string, int> pair reducer id
-    const std::hash<std::string> wordHashFn;
+    std::hash<std::string> wordHashFn;
 
     // create reducer queues
     std::vector<reducer_queue_t*> reducerQueues;
@@ -176,7 +177,7 @@ bool mapReduceSerial()
 {
     // used in mod operation to determine final reducer queue
     unsigned int maxReducers = 8;
-    const std::hash<std::string> wordHashFn;
+    std::hash<std::string> wordHashFn;
 
     // read file and put lines into a queue
     std::map<std::string, int> wordMap;
@@ -1045,7 +1046,7 @@ void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int redu
     std::cout << "size: " << size << std::endl;
     std::cout << "rank: " << rank << std::endl;
     std::cout << "max threads: " << maxThreads << std::endl;
-    std::vector<std::string> testFiles = getListOfTestFiles("/../../test/files", repeatFiles);
+    std::vector<std::string> testFiles = getListOfTestFiles("map-reduce/test/files/", repeatFiles);
     std::vector<std::string> localFiles;
     omp_init_lock(&sendBufferLock);
     omp_init_lock(&localFileListLock);
@@ -1070,7 +1071,7 @@ void mapReduceMPIParallel(int readerThreadCount, int mapperThreadCount, int redu
     std::vector<double> reducerRunTimes;
 
     // hash function for <string, int> pair reducer id
-    const std::hash<std::string> wordHashFn;
+    std::hash<std::string> wordHashFn;
 
     MPI_Barrier(MPI_COMM_WORLD);
     double elapsed = -MPI_Wtime();
